@@ -269,13 +269,20 @@ button[kind="secondary"]:hover { color: var(--fg) !important; border-color: var(
     background: var(--elev2); color: var(--gold); font-weight: 600;
 }
 
-/* ── Scrollbar ── */
-::-webkit-scrollbar { width: 5px; height: 5px }
+/* reduce streamlit default element spacing */
+.stMarkdown, .element-container { margin-bottom: 0 !important }
+div[data-testid="column"] { padding: 0 4px !important }
+div[data-testid="stVerticalBlock"] > div { gap: 4px !important }
+.stSelectbox { margin-bottom: 0 !important }
+.stTextInput { margin-bottom: 0 !important }
+/* Tighter expanders */
+details summary { padding: .4rem .6rem !important }
+details[open] { padding-bottom: .2rem !important }
 ::-webkit-scrollbar-track { background: var(--bg) }
 ::-webkit-scrollbar-thumb { background: var(--bdr2); border-radius: 3px }
 
-/* ── Budget edit icon ── */
-.budget-edit-icon {
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 5px; height: 5px }
     cursor: pointer; opacity: .5; font-size: .85rem; margin-left: 6px;
     transition: opacity .15s;
 }
@@ -309,10 +316,12 @@ def kpi(label, value, cls="", sub=""):
         f'<div class="kpi-val">{fmt(value)}</div>{s}</div>',
         unsafe_allow_html=True)
 
-def pb_base():
+def pb_base(margin=None):
+    """Base plotly layout kwargs. Pass margin=dict(...) to override."""
+    m = margin if margin is not None else dict(l=8, r=8, t=32, b=8)
     return dict(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                 font=dict(family="Inter", color="#8892a4"),
-                margin=dict(l=8, r=8, t=32, b=8))
+                margin=m)
 
 def mrange(yr, mo):
     return date(yr, mo, 1), date(yr, mo, monthrange(yr, mo)[1])
@@ -417,7 +426,6 @@ with st.sidebar:
 def split_dialog(txn):
     total = float(txn["amount"])
     cats  = flat_cat_list()
-    all_cats_raw = _cats()
 
     st.markdown(
         "**{}**  ·  {}  ·  "
@@ -436,74 +444,92 @@ def split_dialog(txn):
                 {"cat": s["category"], "amt": float(s["amount"]), "memo": s.get("memo","") or ""}
                 for s in existing]
         else:
-            # Default: 2 rows — full amount to first, 0 to second
             st.session_state[key] = [
                 {"cat": txn.get("category") or "Uncategorized", "amt": total, "memo": ""},
                 {"cat": "Uncategorized", "amt": 0.0, "memo": ""},
             ]
 
     rows = st.session_state[key]
+    n    = len(rows)
+
+    tid = txn['id']
+
+    # ── Auto-balance: update row[1] session_state BEFORE widgets render ─────
+    # This means when row[1]'s number_input renders, it already has the right value
+    # without needing st.rerun(), so the dialog stays open.
+    if n == 2:
+        k0 = f"sdlg_amt_{tid}_0"
+        k1 = f"sdlg_amt_{tid}_1"
+        if k0 in st.session_state:
+            balanced = round(total - float(st.session_state[k0]), 2)
+            st.session_state[k1] = balanced
+            rows[1]["amt"] = balanced
 
     for i, row in enumerate(rows):
-        c1, c2, c3, c4 = st.columns([3, 2, 2.5, 0.6])
+        c1, c2, c3, c4 = st.columns([3.2, 1.8, 2.2, 0.5])
         with c1:
             cidx = find_cat_index(cats, row["cat"])
             sel  = st.selectbox("Category", cats, index=cidx,
-                                key=f"sdlg_cat_{txn['id']}_{i}",
-                                label_visibility="collapsed")
+                                key=f"sdlg_cat_{tid}_{i}",
+                                label_visibility="collapsed",
+                                format_func=child_from_display)
             rows[i]["cat"] = child_from_display(sel)
         with c2:
-            prev_amt = float(row["amt"])
-            amt = st.number_input("Amount", value=prev_amt, step=0.01, format="%.2f",
-                                  key=f"sdlg_amt_{txn['id']}_{i}",
+            amt = st.number_input("Amount", value=float(row["amt"]),
+                                  step=0.01, format="%.2f",
+                                  key=f"sdlg_amt_{tid}_{i}",
                                   label_visibility="collapsed")
-            amt = float(amt)
-            # Auto-balance: if there are exactly 2 rows and we're editing row 0, update row 1
-            if abs(amt - prev_amt) > 0.001:
-                rows[i]["amt"] = amt
-                if len(rows) == 2 and i == 0:
-                    rows[1]["amt"] = round(total - amt, 2)
-                    st.rerun()
-            else:
-                rows[i]["amt"] = amt
+            rows[i]["amt"] = float(amt)
         with c3:
             memo = st.text_input("Note", value=row["memo"],
-                                 key=f"sdlg_mem_{txn['id']}_{i}",
+                                 key=f"sdlg_mem_{tid}_{i}",
                                  placeholder="optional note",
                                  label_visibility="collapsed")
             rows[i]["memo"] = memo
         with c4:
-            if len(rows) > 2:
-                if st.button("✕", key=f"sdlg_del_{txn['id']}_{i}"):
-                    rows.pop(i); st.rerun()
+            if n > 2:
+                if st.button("✕", key=f"sdlg_del_{tid}_{i}", type="secondary"):
+                    rows.pop(i)
+                    # Clear widget keys for removed row so state is clean
+                    for suffix in ("cat","amt","mem"):
+                        k = f"sdlg_{suffix}_{tid}_{i}"
+                        if k in st.session_state: del st.session_state[k]
+                    st.rerun()
 
     allocated = sum(float(r["amt"]) for r in rows)
     leftover  = round(total - allocated, 2)
     lc = "#00c896" if abs(leftover) < 0.01 else "#ff4f6d"
     st.markdown(
-        f"<div style='display:flex;gap:1rem;margin:.6rem 0;font-size:.85rem'>"
+        f"<div style='display:flex;gap:1.5rem;margin:.5rem 0;font-size:.85rem;"
+        f"background:#1c2438;border-radius:8px;padding:.5rem .9rem'>"
+        f"<span>Total: <b style='color:#e8edf5'>{fmt(total)}</b></span>"
         f"<span>Allocated: <b style='color:#e8edf5'>{fmt(allocated)}</b></span>"
-        f"<span>Leftover: <b style='color:{lc}'>{fmt(leftover)}</b></span></div>",
+        f"<span>Remaining: <b style='color:{lc}'>{fmt(leftover)}</b></span></div>",
         unsafe_allow_html=True)
 
-    ba, bb, bc = st.columns([2, 2, 3])
+    ba, bb, bc, bd = st.columns([1.5, 2, 2, 1.5])
     with ba:
-        if st.button("➕ Add Row"):
+        if st.button("➕ Row", key=f"sdlg_addrow_{tid}"):
             rows.append({"cat":"Uncategorized","amt":0.0,"memo":""}); st.rerun()
     with bb:
         if abs(leftover) > 0.01:
-            if st.button("⟵ Add leftover"):
-                rows[-1]["amt"] = round(float(rows[-1]["amt"]) + leftover, 2); st.rerun()
+            if st.button("⟵ Fill remaining", key=f"sdlg_fill_{tid}"):
+                rows[-1]["amt"] = round(float(rows[-1]["amt"]) + leftover, 2)
+                st.session_state[key] = rows; st.rerun()
     with bc:
-        if st.button("💾 Save Splits", type="primary"):
+        if st.button("💾 Save Splits", type="primary", key=f"sdlg_save_{tid}"):
             if abs(leftover) > 0.01:
-                st.warning("Splits don't balance. Use 'Add leftover' or adjust manually.")
+                st.warning(f"Splits don't balance — {fmt(leftover)} unallocated.")
             else:
-                splits = [{"category":r["cat"],"amount":float(r["amt"]),"memo":r["memo"]}
+                splits = [{"category": r["cat"], "amount": float(r["amt"]), "memo": r["memo"]}
                           for r in rows]
                 db.save_split_transactions(txn["id"], splits)
                 del st.session_state[key]
-                st.success("Splits saved!"); st.rerun()
+                st.success("✓ Splits saved!"); st.rerun()
+    with bd:
+        if st.button("✕ Cancel", type="secondary", key=f"sdlg_cancel_{tid}"):
+            if key in st.session_state: del st.session_state[key]
+            st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -573,8 +599,6 @@ def tags_dialog(txn):
         st.markdown("<span style='color:#8892a4;font-size:.78rem'>No tags yet.</span>",
                     unsafe_allow_html=True)
 
-    st.markdown("<div style='height:.3rem'></div>", unsafe_allow_html=True)
-
     # Single combobox-style input: type a tag name
     # If it matches an existing one → add it; if new → create it with notice
     tag_input = st.text_input(
@@ -607,7 +631,6 @@ def tags_dialog(txn):
     # Quick-pick from existing unused tags
     unused = [t for t in all_tags if t not in current_tags]
     if unused:
-        st.markdown("<div style='height:.2rem'></div>", unsafe_allow_html=True)
         st.caption("Quick-add existing tags:")
         qcols = st.columns(min(len(unused), 5))
         for i, t in enumerate(unused[:10]):
@@ -659,8 +682,6 @@ if selected == "Dashboard":
     with c2: kpi("💳 Expenses",    expenses,"r")
     with c3: kpi("🏦 Net Savings", savings, "t", f"{savr:.1f}% rate")
     with c4: kpi("📊 Net Worth",   nw,      "b", f"Assets {fmt(assets)}")
-
-    st.markdown("<br>", unsafe_allow_html=True)
     l, r = st.columns([3,2])
 
     with l:
@@ -760,7 +781,6 @@ elif selected == "Transactions":
         sort_by = st.selectbox("Sort", ["Date ↓","Date ↑","Amount ↓","Amount ↑"],
                                key="txn_sort", label_visibility="collapsed")
     with r1c5:
-        st.markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
         if st.button("↺", key="txn_reset", help="Reset all filters", type="secondary"):
             for k in ["txn_search","txn_acc","txn_type","txn_sort",
                       "txn_cats","txn_tags","txn_df","txn_dt","txn_amtval","txn_page"]:
@@ -793,8 +813,6 @@ elif selected == "Transactions":
         else:
             st.markdown("<span style='font-size:.73rem;color:#8892a4;line-height:3rem'>"
                         "From · To dates above</span>", unsafe_allow_html=True)
-
-    st.markdown("<div style='height:.1rem'></div>", unsafe_allow_html=True)
 
     # ── Fetch & filter ──
     txns_raw = db.get_transactions(
@@ -863,8 +881,8 @@ elif selected == "Transactions":
         st.info("No transactions found. Adjust filters or import data.")
     else:
         # ── Column headers ──
-        h = st.columns([0.9, 2.8, 2.4, 1.0, 1.5, 0.35, 0.35])
-        for col, lbl in zip(h, ["Date","Description","Category","Amount","Account","","🏷"]):
+        h = st.columns([0.85, 2.6, 2.4, 0.95, 1.4, 0.3])
+        for col, lbl in zip(h, ["Date","Description + Tags / Notes","Category","Amount","Account","✂"]):
             col.markdown(
                 f"<span style='font-size:.65rem;color:#8892a4;text-transform:uppercase;"
                 f"letter-spacing:.08em;font-weight:600'>{lbl}</span>",
@@ -879,95 +897,119 @@ elif selected == "Transactions":
                 split_map[txn["id"]] = db.get_split_transactions(txn["id"])
 
         for txn in page_txns:
-            cols = st.columns([0.9, 2.8, 2.4, 1.0, 1.5, 0.35, 0.35])
+            tid  = txn["id"]
+            cols = st.columns([0.85, 2.6, 2.4, 0.95, 1.4, 0.3])
 
-            # Date
+            # ── Date ──
             cols[0].markdown(f"<span class='txn-date'>{txn['date']}</span>",
                              unsafe_allow_html=True)
 
-            # Description + tag/split pills + notes indicator
-            tag_html = ""
+            # ── Description + inline tags & notes ──
+            cur_tags  = list(txn.get("tags") or [])
+            cur_notes = txn.get("notes") or ""
+            tag_pills = ""
             if txn.get("is_split"):
-                tag_html += " <span class='tag-split'>✂ split</span>"
-            for tg in (txn.get("tags") or []):
-                tag_html += f" <span class='tag-pill'>{tg}</span>"
-            if txn.get("notes"):
-                tag_html += " <span style='color:#8892a4;font-size:.68rem'>📝</span>"
-            cols[1].markdown(
-                f"<span class='txn-desc'>{txn['description'][:46]}</span>{tag_html}",
-                unsafe_allow_html=True)
+                tag_pills += " <span class='tag-split'>✂</span>"
+            for tg in cur_tags:
+                tag_pills += f" <span class='tag-pill'>{tg}</span>"
 
-            # ── Category column — child only, no parent ──
+            with cols[1]:
+                st.markdown(
+                    f"<span class='txn-desc'>{txn['description'][:44]}</span>{tag_pills}",
+                    unsafe_allow_html=True)
+                # Two compact inputs side-by-side
+                ti1, ti2 = st.columns([1, 1.6])
+                with ti1:
+                    new_tag = st.text_input("tag", value="",
+                                            placeholder="＋ add tag…",
+                                            key=f"ti_tag_{tid}",
+                                            label_visibility="collapsed")
+                    if new_tag.strip():
+                        t = new_tag.strip()
+                        if t not in cur_tags:
+                            cur_tags.append(t)
+                            db.update_transaction(tid, tags=cur_tags)
+                            st.rerun()
+                with ti2:
+                    new_notes = st.text_input("note", value=cur_notes,
+                                              placeholder="📝 note…",
+                                              key=f"ti_note_{tid}",
+                                              label_visibility="collapsed")
+                    if new_notes != cur_notes:
+                        db.update_transaction(tid, notes=new_notes)
+
+            # ── Category / Split bar ──
             cur_cat = txn.get("category") or "Uncategorized"
             cidx    = find_cat_index(cats_flat, cur_cat)
+            clr     = _cat_color(cur_cat, _cats())
 
             if txn.get("is_split"):
-                splits  = split_map.get(txn["id"], [])
+                splits = split_map.get(tid, [])
                 if splits:
                     tot_abs = sum(abs(float(s["amount"])) for s in splits) or 1
-                    # Segmented bar
-                    segs_html = ""
-                    labels_html = ""
+                    bar_segs = ""
+                    lbl_segs = ""
                     for i, s in enumerate(splits):
-                        clr  = SPLIT_COLORS[i % len(SPLIT_COLORS)]
-                        pct  = abs(float(s["amount"])) / tot_abs * 100
-                        nm   = (s.get("category") or "?")[:14]
-                        segs_html  += (
-                            f"<div style='flex:{pct};background:{clr};"
-                            f"display:flex;align-items:center;justify-content:center;"
-                            f"font-size:.62rem;font-weight:700;color:#080c14;"
-                            f"overflow:hidden;white-space:nowrap;padding:0 3px'>"
-                            f"{nm} {pct:.0f}%</div>")
-                        labels_html += (
-                            f"<span style='color:{clr};font-size:.64rem;"
-                            f"font-weight:600;white-space:nowrap'>"
-                            f"● {nm}</span> ")
+                        sc  = SPLIT_COLORS[i % len(SPLIT_COLORS)]
+                        pct = abs(float(s["amount"])) / tot_abs * 100
+                        nm  = (s.get("category") or "?")[:14]
+                        amt = fmt(abs(float(s["amount"])))
+                        bar_segs += (
+                            f"<div style='flex:{pct:.2f};background:{sc};min-width:2px'></div>")
+                        lbl_segs += (
+                            f"<div style='flex:{pct:.2f};overflow:hidden;padding:0 2px;"
+                            f"min-width:0'>"
+                            f"<div style='font-size:.6rem;font-weight:700;color:{sc};"
+                            f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>"
+                            f"{nm}</div>"
+                            f"<div style='font-size:.57rem;color:#8892a4;white-space:nowrap'>"
+                            f"{amt}</div>"
+                            f"</div>")
+                    # Bar (8px) + labels (28px) = ~36px total ≈ selectbox height
                     cols[2].markdown(
                         f"<div style='width:100%'>"
-                        f"<div style='display:flex;border-radius:5px;overflow:hidden;"
-                        f"height:18px;gap:1px'>{segs_html}</div>"
-                        f"<div style='display:flex;flex-wrap:wrap;gap:4px;margin-top:2px'>"
-                        f"{labels_html}</div></div>",
+                        f"<div style='display:flex;border-radius:3px;overflow:hidden;"
+                        f"height:8px;gap:1px'>{bar_segs}</div>"
+                        f"<div style='display:flex;margin-top:3px;height:28px'>{lbl_segs}</div>"
+                        f"</div>",
                         unsafe_allow_html=True)
                 else:
-                    clr = _cat_color(cur_cat, _cats())
                     cols[2].markdown(
                         f"<span class='cat-badge' style='background:{clr}22;"
                         f"border:1px solid {clr}55;color:{clr}'>{cur_cat}</span>",
                         unsafe_allow_html=True)
             else:
-                # Editable dropdown — shows only child name (no parent prefix)
+                # Color-tinted selectbox: inject border color via targeted CSS
+                cols[2].markdown(
+                    f"<style>div[data-testid='stSelectbox']:has(> label + div "
+                    f"[data-baseweb='select']) {{ border-color:{clr}55 }}</style>",
+                    unsafe_allow_html=True)
                 new_cat_raw = cols[2].selectbox(
                     "cat", cats_flat, index=cidx,
-                    key=f"cat_{txn['id']}",
+                    key=f"cat_{tid}",
                     label_visibility="collapsed",
                     format_func=child_from_display)
                 new_cat = child_from_display(new_cat_raw)
                 if new_cat != cur_cat:
-                    db.update_transaction(txn["id"], category=new_cat)
+                    db.update_transaction(tid, category=new_cat)
                     cat_engine.learn_from_correction(txn["description"], new_cat, cur_cat)
                     st.toast("✓ Category saved")
 
-            # Amount
+            # ── Amount ──
             ac = "amt-pos" if float(txn["amount"]) >= 0 else "amt-neg"
             cols[3].markdown(f"<span class='{ac}'>{fmt(txn['amount'])}</span>",
                              unsafe_allow_html=True)
 
-            # Account — short name only
-            acc_disp = (txn.get("account_name") or "")[:20]
+            # ── Account ──
             cols[4].markdown(
-                f"<span style='font-size:.74rem;color:#8892a4'>{acc_disp}</span>",
+                f"<span style='font-size:.73rem;color:#8892a4'>"
+                f"{(txn.get('account_name') or '')[:20]}</span>",
                 unsafe_allow_html=True)
 
-            # Split button
-            if cols[5].button("✂", key=f"split_{txn['id']}_{cur_page}",
+            # ── Split button ──
+            if cols[5].button("✂", key=f"split_{tid}_{cur_page}",
                               help="Split transaction", type="secondary"):
                 split_dialog(txn)
-
-            # Tags & Notes button
-            if cols[6].button("🏷", key=f"tags_{txn['id']}_{cur_page}",
-                              help="Tags & Notes", type="secondary"):
-                tags_dialog(txn)
 
             st.markdown("<hr style='border-color:#1e2a3d;margin:1px 0'>",
                         unsafe_allow_html=True)
@@ -1021,7 +1063,6 @@ elif selected == "Budgets":
     with b1: kpi("Budgeted",  tb, "b")
     with b2: kpi("Spent",     ts, "r")
     with b3: kpi("Remaining", tr, "g" if tr>=0 else "r")
-    st.markdown("<br>", unsafe_allow_html=True)
 
     st.markdown('<div class="sh">📊 Budget Performance  <span style="font-size:.7rem;color:#8892a4;font-weight:400">(click ✏️ to edit any budget)</span></div>',
                 unsafe_allow_html=True)
@@ -1045,7 +1086,7 @@ elif selected == "Budgets":
         if it["cft"] != "none":
             cft_badge = f" <span style='font-size:.65rem;color:#9b6dff;background:#9b6dff22;padding:1px 7px;border-radius:10px'>⟳ {it['cft']}</span>"
 
-        r1,r2,r3,r4,r5 = st.columns([3.5,1.5,1.5,1.3,0.5])
+        r1,r2,r3,r4,r5,r6 = st.columns([3.5,1.5,1.5,1.3,0.4,0.4])
         with r1:
             st.markdown(
                 f"<div style='margin:3px 0'>"
@@ -1064,10 +1105,15 @@ elif selected == "Budgets":
             rc = "#00c896" if rem>=0 else "#ff4f6d"
             st.markdown(f"<div style='font-size:.78rem;color:#8892a4;text-align:right'>Left<br><b style='color:{rc}'>{fmt(rem)}</b></div>",unsafe_allow_html=True)
         with r5:
-            st.markdown("<div style='height:.5rem'></div>", unsafe_allow_html=True)
-            if st.button("✏️", key=f"bgt_edit_{it['cat']}", help=f"Edit {it['cat']} budget",
+            if st.button("✏️", key=f"bgt_edit_{it['cat']}", help=f"Edit budget",
                          type="secondary"):
                 budget_edit_dialog(it["cat"], it["budgeted"], mo_key)
+        with r6:
+            if st.button("🗑", key=f"bgt_del_{it['cat']}", help=f"Delete budget",
+                         type="secondary"):
+                db.delete_budget(it["cat"], mo_key)
+                st.toast(f"✓ Deleted {it['cat']} budget")
+                st.rerun()
         st.markdown("<hr style='border-color:#1e2a3d;margin:2px 0'>", unsafe_allow_html=True)
 
     # Show categories with no budget yet
@@ -1164,7 +1210,6 @@ elif selected == "Goals":
                         f"</div>",
                         unsafe_allow_html=True)
                 with gc3:
-                    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
                     if st.button("🗑", key=f"del_goal_{g['id']}", help="Delete goal",
                                  type="secondary"):
                         db.delete_goal(g["id"]); st.rerun()
@@ -1210,7 +1255,6 @@ elif selected == "Accounts":
     with n1: kpi("Total Assets",      assets, "g")
     with n2: kpi("Total Liabilities", liabs,  "r")
     with n3: kpi("Net Worth",         nw,     "t")
-    st.markdown("<br>", unsafe_allow_html=True)
 
     for group, gtype in [("💵 Checking","checking"),("💳 Credit Cards","credit"),
                          ("📈 Investments","investment"),("🏠 Mortgage","mortgage")]:
@@ -1321,8 +1365,8 @@ elif selected == "Reports":
                 fig_pie.add_annotation(text=f"<b>{fmt(total_exp)}</b>",
                                        x=.5, y=.5, showarrow=False,
                                        font=dict(size=13, color="#e8edf5"))
-                fig_pie.update_layout(showlegend=False, **pb_base(),
-                                      height=280, margin=dict(l=5,r=5,t=5,b=5))
+                fig_pie.update_layout(showlegend=False, height=280,
+                                      **pb_base(margin=dict(l=5,r=5,t=5,b=5)))
                 st.plotly_chart(fig_pie, use_container_width=True, key="rpt_spend_pie")
             with break_col:
                 for i, s in enumerate(sp[:12]):
@@ -1330,8 +1374,6 @@ elif selected == "Reports":
                     pct = s["total"] / total_exp * 100 if total_exp else 0
                     st.markdown(hbar(s["category"], s["total"], total_exp, clr,
                                      f"{fmt(s['total'])} · {pct:.1f}%"), unsafe_allow_html=True)
-
-            st.markdown("<div style='height:.3rem'></div>", unsafe_allow_html=True)
             parent_groups: dict = {}
             for s in sp:
                 par = s.get("parent_category","Other")
@@ -1368,7 +1410,8 @@ elif selected == "Reports":
                     hovertemplate="<b>%{label}</b><br>%{value:$,.2f}<extra></extra>"))
                 fig_pie.add_annotation(text=f"<b>{fmt(total_inc)}</b>", x=.5, y=.5, showarrow=False,
                                        font=dict(size=13, color="#00c896"))
-                fig_pie.update_layout(showlegend=False, **pb_base(), height=260, margin=dict(l=5,r=5,t=5,b=5))
+                fig_pie.update_layout(showlegend=False, height=260,
+                                      **pb_base(margin=dict(l=5,r=5,t=5,b=5)))
                 st.plotly_chart(fig_pie, use_container_width=True, key="rpt_inc_pie")
             with c_list:
                 for i, s in enumerate(inc_sp):
@@ -1526,10 +1569,11 @@ elif selected == "Reports":
                               **pb_base(), height=300)
             st.plotly_chart(fig, use_container_width=True, key="rpt_monthly_bar")
             fig2 = go.Figure(go.Scatter(x=df["month"], y=df["savings_rate"],
-                             fill="tozeroy", line=dict(color="#9b6dff",width=2), fillcolor="#9b6dff18",
+                             fill="tozeroy", line=dict(color="#9b6dff",width=2),
+                             fillcolor="rgba(155,109,255,0.1)",
                              hovertemplate="%{x}: %{y:.1f}%<extra></extra>"))
             fig2.update_layout(title="Savings Rate %", xaxis=dict(gridcolor="#1e2a3d"), yaxis=dict(gridcolor="#1e2a3d"),
-                               **pb_base(), height=150, margin=dict(l=8,r=8,t=28,b=8))
+                               height=150, **pb_base(margin=dict(l=8,r=8,t=28,b=8)))
             st.plotly_chart(fig2, use_container_width=True, key="rpt_monthly_sparkline")
             st.dataframe(df[["month","income","expenses","net","savings_rate"]].rename(columns={"month":"Month","income":"Income","expenses":"Expenses","net":"Net","savings_rate":"Rate %"}),
                          use_container_width=True, hide_index=True,
@@ -1583,7 +1627,6 @@ elif selected == "Investments":
             with cols_inv[i]:
                 kpi(f"📈 {a['name'][:20]}", a["balance"], "g",
                     f"{a['institution']} {a.get('account_number') or ''}")
-        st.markdown("<br>", unsafe_allow_html=True)
 
     transfers     = db.get_investment_transfers(d_start, d_end)
     all_transfers = db.get_investment_transfers()

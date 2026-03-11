@@ -140,3 +140,54 @@ S4: plotly unique keys; Transactions own date (last 30d); 2-row always-visible
 households). Replicate all schema, pages, CSS variables, dialogs, and behaviors
 exactly as documented in FINANCEIQ_CONTEXT.txt v4."
 ================================================================================
+
+── SESSION 5 CHANGES ────────────────────────────────────────────────────────────
+1. TypeError fix: pb_base() now accepts optional margin= param to avoid duplicate
+   keyword when callers also pass margin=. Signature: pb_base(margin=None)
+   All update_layout calls changed from: **pb_base(), margin=dict(...)
+   to: **pb_base(margin=dict(...))
+
+2. Split bar: shows category name + dollar amount (not %) inside each segment.
+   Height 36px to match selectbox height. No legend below bar.
+   Each segment has flex:pct, column flex-direction, name on top + amt below.
+
+3. Regular category dropdown: tinted border+bg using _cat_color per row via
+   injected <style> targeting the selectbox container.
+
+4. Reduced blank space:
+   - All pure spacer st.markdown("<br>") and height div calls removed via regex
+   - CSS: .stMarkdown/.element-container margin-bottom:0, column padding:4px,
+     stVerticalBlock gap:4px, stSelectbox/stTextInput margin-bottom:0
+   - Expander padding tightened
+
+
+── SESSION 6 CHANGES ────────────────────────────────────────────────────────────
+1. fillcolor fix: '#9b6dff18' (invalid 8-digit hex) → 'rgba(155,109,255,0.1)'
+   in monthly savings-rate sparkline scatter.
+
+2. Transactions - inline tags & notes (no dialog):
+   Transaction row columns now: [0.85, 2.6, 2.4, 0.95, 1.4, 0.3]
+   Description column contains:
+     Line 1: description text + tag pills (✂ split indicator if is_split)
+     Line 2: two sub-columns [1, 1.6]:
+       Left  → text_input key ti_tag_{tid}  placeholder "＋ add tag…"
+               typing + Enter adds tag, saves immediately via update_transaction
+       Right → text_input key ti_note_{tid} placeholder "📝 note…"
+               edits notes inline, saves on change
+   🏷 dialog button removed entirely.
+
+3. Split bar: bar (8px) + labels below (28px) = 36px total ≈ selectbox height
+   Bar: flex div, 8px, segments colored by SPLIT_COLORS, gap 1px, border-radius 3px
+   Labels: flex div below bar, each segment has colored category name + grey amount
+   No legend. Single-category fallback: cat-badge with color.
+   Regular category selectbox: CSS border color hint using _cat_color.
+
+4. Split dialog - no close on amount change:
+   Auto-balance done by writing to st.session_state[widget_key] for row[1]
+   BEFORE rendering that widget. This avoids st.rerun() entirely for balance.
+   Row structure: col [3.2, 1.8, 2.2, 0.5] with key prefix sdlg_{cat/amt/mem}_{tid}_{i}
+   Buttons: sdlg_addrow_{tid}, sdlg_fill_{tid}, sdlg_save_{tid}, sdlg_cancel_{tid}
+   Delete row: clears individual widget session keys before st.rerun()
+
+5. Budget delete: row columns [3.5,1.5,1.5,1.3,0.4,0.4]
+   r6: 🗑 button key bgt_del_{cat} → calls db.delete_budget(cat, mo_key), st.toast, rerun
