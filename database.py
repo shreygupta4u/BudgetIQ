@@ -53,7 +53,6 @@ def _migrate(cur):
         ("transfer_to_account_id",  "INT"),
         ("transfer_investment_cat", "NVARCHAR(100)"),
         ("tags",                    "NVARCHAR(MAX)"),
-        ("notes",                   "NVARCHAR(MAX)"),
     ]:
         cur.execute(f"""
             IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS
@@ -250,7 +249,7 @@ def get_transactions(account_id=None, limit=None, start_date=None,
     query = f"""
         SELECT {top}
                t.id, t.account_id, t.date, t.description,
-               t.original_desc, t.amount, t.memo, t.notes,
+               t.original_desc, t.amount, t.memo,
                ISNULL(t.is_split,    0) AS is_split,
                ISNULL(t.is_transfer, 0) AS is_transfer,
                t.transfer_to_account_id,

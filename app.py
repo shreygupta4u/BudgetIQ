@@ -54,25 +54,25 @@ section[data-testid="stSidebar"] {
     border-right: 1px solid var(--bdr);
 }
 header[data-testid="stHeader"] { display: none }
-.main .block-container { padding: 1rem 1.6rem 2rem; max-width: 1500px }
+.main .block-container { padding: 1.4rem 2rem; max-width: 1500px }
 h1,h2,h3 { font-family: 'Syne', sans-serif; letter-spacing: -.02em }
 
 /* ── KPI Cards ── */
 .kpi {
     background: linear-gradient(135deg, var(--elev) 0%, var(--card) 100%);
     border: 1px solid var(--bdr2);
-    border-radius: 12px;
-    padding: .85rem 1.1rem;
+    border-radius: 16px;
+    padding: 1.2rem 1.5rem;
     position: relative; overflow: hidden;
 }
 .kpi::before {
     content: ''; position: absolute; top: 0; left: 0;
-    width: 3px; height: 100%; background: var(--gold);
+    width: 4px; height: 100%; background: var(--gold);
     border-radius: 4px 0 0 4px;
 }
 .kpi::after {
-    content: ''; position: absolute; top: -20px; right: -20px;
-    width: 70px; height: 70px; border-radius: 50%;
+    content: ''; position: absolute; top: -30px; right: -30px;
+    width: 90px; height: 90px; border-radius: 50%;
     background: var(--gold); opacity: .04;
 }
 .kpi.g::before { background: var(--green) }
@@ -84,11 +84,11 @@ h1,h2,h3 { font-family: 'Syne', sans-serif; letter-spacing: -.02em }
 .kpi.b::before { background: var(--blue) }
 .kpi.b::after  { background: var(--blue) }
 .kpi-lbl {
-    font-size: .64rem; font-weight: 600; letter-spacing: .09em;
-    text-transform: uppercase; color: var(--muted); margin-bottom: .3rem;
+    font-size: .68rem; font-weight: 600; letter-spacing: .10em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: .4rem;
 }
-.kpi-val { font-size: 1.45rem; font-weight: 700; line-height: 1.1 }
-.kpi-sub { font-size: .7rem; color: var(--muted); margin-top: .25rem }
+.kpi-val { font-size: 1.7rem; font-weight: 700; line-height: 1.1 }
+.kpi-sub { font-size: .73rem; color: var(--muted); margin-top: .3rem }
 
 /* ── Section header ── */
 .sh {
@@ -542,95 +542,45 @@ def budget_edit_dialog(cat_name, current_amount, mo_key):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAGS + NOTES DIALOG  — single combobox-style input, auto-creates new tags
+# TAGS DIALOG
 # ═══════════════════════════════════════════════════════════════════════════════
-@st.dialog("🏷️ Tags & Notes", width="large")
+@st.dialog("🏷️ Manage Tags", width="large")
 def tags_dialog(txn):
-    st.markdown(
-        f"<div style='font-size:.88rem;font-weight:600;color:#e8edf5;margin-bottom:.1rem'>"
-        f"{txn['description'][:60]}</div>"
-        f"<div style='font-size:.75rem;color:#8892a4;margin-bottom:.8rem'>"
-        f"{txn['date']}</div>",
-        unsafe_allow_html=True)
+    st.markdown(f"**{txn['description'][:60]}**  ·  {txn['date']}")
+    st.markdown("---")
 
-    current_tags = list(txn.get("tags") or [])
-    all_tags     = db.get_all_tags()
+    current_tags = txn.get("tags") or []
+    all_tags = db.get_all_tags()
 
-    # ── Tags section ──────────────────────────────────────────────────────────
-    st.markdown("**Tags**")
-
-    # Show current tags as removable pills
+    # Show existing tags
     if current_tags:
-        tag_row = st.columns(min(len(current_tags), 6))
+        st.markdown("**Current tags:**")
+        tag_cols = st.columns(min(len(current_tags), 5))
         for i, tg in enumerate(current_tags):
-            with tag_row[i % len(tag_row)]:
-                if st.button(f"✕ {tg}", key=f"rmtag_{txn['id']}_{i}", type="secondary"):
+            with tag_cols[i % len(tag_cols)]:
+                if st.button(f"✕ {tg}", key=f"rmtag_{txn['id']}_{i}"):
                     current_tags.remove(tg)
                     db.update_transaction(txn["id"], tags=current_tags)
                     st.rerun()
-    else:
-        st.markdown("<span style='color:#8892a4;font-size:.78rem'>No tags yet.</span>",
-                    unsafe_allow_html=True)
 
-    st.markdown("<div style='height:.3rem'></div>", unsafe_allow_html=True)
-
-    # Single combobox-style input: type a tag name
-    # If it matches an existing one → add it; if new → create it with notice
-    tag_input = st.text_input(
-        "Add tag (type to search or create new)",
-        placeholder="e.g. vacation, tax-deductible, business…",
-        key=f"tag_input_{txn['id']}")
-
-    if tag_input.strip():
-        tg_val   = tag_input.strip()
-        is_new   = tg_val not in all_tags
-        already  = tg_val in current_tags
-
-        if already:
-            st.caption("✓ Already added to this transaction.")
-        elif is_new:
-            st.info(f"✨ Creating new tag **'{tg_val}'** — press Add below")
-        else:
-            st.caption(f"Existing tag · press Add to apply")
-
-        btn_label = "➕ Create & Add" if is_new else "➕ Add"
-        if st.button(btn_label, key=f"add_tag_{txn['id']}") and not already:
-            current_tags.append(tg_val)
-            db.update_transaction(txn["id"], tags=current_tags)
-            if is_new:
-                st.toast(f"✨ New tag '{tg_val}' created & added")
-            else:
-                st.toast(f"✓ Tag '{tg_val}' added")
-            st.rerun()
-
-    # Quick-pick from existing unused tags
+    # Add existing tag
     unused = [t for t in all_tags if t not in current_tags]
     if unused:
-        st.markdown("<div style='height:.2rem'></div>", unsafe_allow_html=True)
-        st.caption("Quick-add existing tags:")
-        qcols = st.columns(min(len(unused), 5))
-        for i, t in enumerate(unused[:10]):
-            with qcols[i % 5]:
-                if st.button(f"+ {t}", key=f"qtag_{txn['id']}_{t}", type="secondary"):
-                    current_tags.append(t)
-                    db.update_transaction(txn["id"], tags=current_tags)
-                    st.rerun()
+        sel_tag = st.selectbox("Add existing tag", ["— select —"] + unused)
+        if sel_tag != "— select —":
+            if st.button("Add Tag"):
+                current_tags.append(sel_tag)
+                db.update_transaction(txn["id"], tags=current_tags)
+                st.rerun()
 
-    st.markdown("---")
-
-    # ── Notes section ─────────────────────────────────────────────────────────
-    st.markdown("**Notes**")
-    cur_notes = txn.get("notes") or ""
-    new_notes = st.text_area(
-        "Notes", value=cur_notes,
-        placeholder="Add any personal notes about this transaction…",
-        height=100, label_visibility="collapsed",
-        key=f"notes_{txn['id']}")
-
-    if st.button("💾 Save Notes", type="primary", key=f"save_notes_{txn['id']}"):
-        db.update_transaction(txn["id"], notes=new_notes)
-        st.toast("✓ Notes saved")
-        st.rerun()
+    # Create new tag
+    new_tag = st.text_input("Or create new tag", placeholder="e.g. vacation, tax-deductible")
+    if st.button("➕ Create & Add") and new_tag.strip():
+        tg = new_tag.strip()
+        if tg not in current_tags:
+            current_tags.append(tg)
+            db.update_transaction(txn["id"], tags=current_tags)
+        st.success(f"Tag '{tg}' added"); st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -731,60 +681,102 @@ if selected == "Dashboard":
 # TRANSACTIONS
 # ═══════════════════════════════════════════════════════════════════════════════
 elif selected == "Transactions":
-    st.markdown("<h1 style='margin-bottom:.3rem'>Transactions</h1>", unsafe_allow_html=True)
+    st.markdown("<h1>Transactions</h1>", unsafe_allow_html=True)
 
-    cats_flat    = flat_cat_list()
-    cats_clean   = [child_from_display(c) for c in cats_flat]
+    cats_flat  = flat_cat_list()
+    cats_clean = [child_from_display(c) for c in cats_flat]
     all_cats_raw = _cats()
-    accts_all    = db.get_accounts()
-    all_tags     = db.get_all_tags()
+    accts_all  = db.get_accounts()
+    all_tags   = db.get_all_tags()
 
-    # ── Single compact filter bar ──
-    fb1, fb2, fb3, fb4, fb5 = st.columns([2.5, 1.2, 1.2, 1.2, 0.7])
-    with fb1:
-        search = st.text_input("🔍", placeholder="Search…", key="txn_search",
-                               label_visibility="collapsed")
-    with fb2:
-        acc_options = {a["name"]: a["id"] for a in accts_all}
-        sel_acc_label = st.selectbox("Account", ["All Accounts"] + list(acc_options.keys()),
-                                     key="txn_acc", label_visibility="collapsed")
-        sel_acc_ids    = [] if sel_acc_label == "All Accounts" else [acc_options[sel_acc_label]]
-        sel_acc_labels = [] if sel_acc_label == "All Accounts" else [sel_acc_label]
-    with fb3:
-        type_filter = st.selectbox("Type", ["All","Expenses","Income"],
-                                   key="txn_type", label_visibility="collapsed")
-    with fb4:
-        sort_by = st.selectbox("Sort", ["Date ↓","Date ↑","Amount ↓","Amount ↑"],
-                               key="txn_sort", label_visibility="collapsed")
-    with fb5:
+    # ── Top bar: search + filter toggle + sort ──
+    tb1, tb2, tb3, tb4 = st.columns([3, 0.8, 0.8, 1.5])
+    with tb1:
+        search = st.text_input("🔍 Search", placeholder="Search transactions…", key="txn_search")
+    with tb2:
         st.markdown("<div style='height:1.7rem'></div>", unsafe_allow_html=True)
-        if st.button("↺", key="txn_reset", help="Reset filters", type="secondary"):
-            for k in ["txn_search","txn_acc","txn_type","txn_sort","txn_page"]:
+        if st.button("🔽 Filters", key="txn_filter_toggle"):
+            st.session_state["show_filter_panel"] = not st.session_state["show_filter_panel"]
+    with tb3:
+        st.markdown("<div style='height:1.7rem'></div>", unsafe_allow_html=True)
+        if st.button("🔄 Reset", key="txn_reset"):
+            for k in ["txn_sel_accs","txn_sel_cats","txn_sel_tags","txn_search"]:
                 if k in st.session_state: del st.session_state[k]
+            st.session_state["txn_page"] = 1
+            st.session_state["show_filter_panel"] = False
             st.rerun()
+    with tb4:
+        sort_by = st.selectbox("Sort", ["Date ↓","Date ↑","Amount ↓","Amount ↑"], key="txn_sort")
 
-    # Defaults — no panel needed anymore
-    sel_cats    = []
-    sel_tags    = []
-    f_date_from = d_start
-    f_date_to   = d_end
-    amt_filter  = ("Expenses only" if type_filter == "Expenses"
-                   else "Income only" if type_filter == "Income"
-                   else "All Amounts")
-    amt_val     = 0.0
+    # ── Filter panel (Quicken-style) ──
+    sel_acc_ids    = []
+    sel_acc_labels = []   # must be defined even when panel is hidden
+    sel_cats       = []
+    sel_tags       = []
+    f_date_from    = d_start
+    f_date_to      = d_end
+    amt_filter     = "All Amounts"
+    amt_val        = 0.0
 
-    # ── Fetch & filter ──
+    if st.session_state["show_filter_panel"]:
+        with st.container():
+            st.markdown('<div class="filter-panel">', unsafe_allow_html=True)
+            fp1, fp2, fp3, fp4 = st.columns(4)
+
+            with fp1:
+                st.markdown('<div class="filter-section-lbl">📅 Accounts</div>', unsafe_allow_html=True)
+                acc_options = {f"{a['name']} ({a['institution']})": a["id"] for a in accts_all}
+                sel_acc_labels = st.multiselect("Accounts", list(acc_options.keys()),
+                                                 default=[], key="txn_sel_accs",
+                                                 label_visibility="collapsed")
+                sel_acc_ids = [acc_options[l] for l in sel_acc_labels]
+
+            with fp2:
+                st.markdown('<div class="filter-section-lbl">🏷️ Categories</div>', unsafe_allow_html=True)
+                sel_cats = st.multiselect("Categories", cats_clean,
+                                           default=[], key="txn_sel_cats",
+                                           label_visibility="collapsed")
+
+            with fp3:
+                st.markdown('<div class="filter-section-lbl">🔖 Tags</div>', unsafe_allow_html=True)
+                sel_tags = st.multiselect("Tags", all_tags,
+                                           default=[], key="txn_sel_tags",
+                                           label_visibility="collapsed")
+
+            with fp4:
+                st.markdown('<div class="filter-section-lbl">📅 Date Range</div>', unsafe_allow_html=True)
+                f_date_from = st.date_input("From", value=d_start, key="txn_df2")
+                f_date_to   = st.date_input("To",   value=d_end,   key="txn_dt2")
+
+            fp5, fp6, _ = st.columns([2, 2, 2])
+            with fp5:
+                st.markdown('<div class="filter-section-lbl">💵 Amount</div>', unsafe_allow_html=True)
+                amt_filter = st.selectbox("Amount Filter",
+                    ["All Amounts","Expenses only","Income only","Greater than…","Less than…"],
+                    key="txn_af2", label_visibility="collapsed")
+            with fp6:
+                if amt_filter in ("Greater than…","Less than…"):
+                    amt_val = st.number_input("Value", value=0.0, step=10.0, format="%.2f",
+                                              key="txn_av2")
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── Fetch transactions ──
+    # For multi-account filter, fetch all and filter client-side
     txns_raw = db.get_transactions(
         start_date=f_date_from, end_date=f_date_to,
         search=search or None,
+        tags_filter=sel_tags if sel_tags else None,
     )
 
+    # Apply account filter
     if sel_acc_ids:
         txns_raw = [t for t in txns_raw if t["account_id"] in sel_acc_ids]
+
+    # Apply category multi-filter
     if sel_cats:
         txns_raw = [t for t in txns_raw if t.get("category") in sel_cats]
-    if sel_tags:
-        txns_raw = [t for t in txns_raw if any(tg in (t.get("tags") or []) for tg in sel_tags)]
+
+    # Amount filter
     if amt_filter == "Expenses only":
         txns_raw = [t for t in txns_raw if float(t["amount"]) < 0]
     elif amt_filter == "Income only":
@@ -803,11 +795,11 @@ elif selected == "Transactions":
     fn, rev = sort_fns[sort_by]
     txns_raw.sort(key=fn, reverse=rev)
 
-    txns        = txns_raw
+    txns = txns_raw
     total_count = len(txns)
     total_pages = max(1, (total_count + PAGE_SIZE - 1) // PAGE_SIZE)
 
-    cur_filter = f"{sel_acc_ids}|{type_filter}|{search}|{sort_by}|{f_date_from}|{f_date_to}"
+    cur_filter = f"{sel_acc_ids}|{sel_cats}|{sel_tags}|{search}|{sort_by}|{amt_filter}|{amt_val}|{f_date_from}|{f_date_to}"
     if cur_filter != st.session_state["_prev_filter"]:
         st.session_state["txn_page"] = 1
         st.session_state["_prev_filter"] = cur_filter
@@ -815,109 +807,102 @@ elif selected == "Transactions":
     cur_page  = min(st.session_state["txn_page"], total_pages)
     page_txns = txns[(cur_page-1)*PAGE_SIZE : cur_page*PAGE_SIZE]
 
-    # Summary bar
+    # Active filter chips
+    chips = []
+    if sel_acc_labels:    chips.append(f"Accounts: {', '.join(sel_acc_labels)}")
+    if sel_cats:          chips.append(f"Categories: {', '.join(sel_cats)}")
+    if sel_tags:          chips.append(f"Tags: {', '.join(sel_tags)}")
+    if amt_filter != "All Amounts": chips.append(amt_filter)
+
     exp_total = sum(abs(float(t["amount"])) for t in txns if float(t["amount"])<0)
     inc_total = sum(float(t["amount"])       for t in txns if float(t["amount"])>0)
 
-    chips = []
-    if sel_acc_labels: chips.append(sel_acc_label)
-    if type_filter != "All": chips.append(type_filter)
-    if search: chips.append(f'"{search}"')
     chip_html = "".join(f"<span class='active-filter-chip'>{c}</span> " for c in chips)
-
     st.markdown(
-        f"<div style='display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;"
-        f"font-size:.78rem;color:#8892a4;margin:.3rem 0 .5rem'>"
-        f"<b style='color:#e8edf5'>{total_count}</b> transactions  ·  "
-        f"<span style='color:#00c896'>▲ {fmt(inc_total)}</span>  "
-        f"<span style='color:#ff4f6d'>▼ {fmt(exp_total)}</span>  "
-        f"<span>pg {cur_page}/{total_pages}</span>"
-        f"{'  ' + chip_html if chips else ''}</div>",
+        f"<div style='display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;font-size:.8rem;color:#8892a4;margin:.4rem 0 .6rem'>"
+        f"<span>📋 <b style='color:#e8edf5'>{total_count}</b></span>"
+        f"<span>💚 <b style='color:#00c896'>{fmt(inc_total)}</b></span>"
+        f"<span>🔴 <b style='color:#ff4f6d'>{fmt(exp_total)}</b></span>"
+        f"<span>Page {cur_page}/{total_pages}</span>"
+        f"{chip_html}</div>",
         unsafe_allow_html=True)
 
     if not txns:
         st.info("No transactions found. Adjust filters or import data.")
     else:
-        # ── Column headers ──
-        h = st.columns([0.9, 2.8, 2.4, 1.0, 1.5, 0.35, 0.35])
-        for col, lbl in zip(h, ["Date","Description","Category","Amount","Account","","🏷"]):
+        # ── Column headers with sort indicators ──
+        h = st.columns([1.0, 2.6, 0.1, 2.6, 1.1, 1.4, 0.45, 0.45])
+        for col, lbl in zip(h, ["Date ↕","Description","","Category","Amount ↕","Account","","🏷"]):
             col.markdown(
-                f"<span style='font-size:.65rem;color:#8892a4;text-transform:uppercase;"
+                f"<span style='font-size:.66rem;color:#8892a4;text-transform:uppercase;"
                 f"letter-spacing:.08em;font-weight:600'>{lbl}</span>",
                 unsafe_allow_html=True)
-        st.markdown("<hr style='border-color:#1e2a3d;margin:2px 0 4px'>",
-                    unsafe_allow_html=True)
+        st.markdown("<hr style='border-color:#1e2a3d;margin:3px 0'>", unsafe_allow_html=True)
 
-        # ── Pre-fetch split data ──
+        # ── Pre-fetch split data for page ──
         split_map = {}
         for txn in page_txns:
             if txn.get("is_split"):
-                split_map[txn["id"]] = db.get_split_transactions(txn["id"])
+                splits = db.get_split_transactions(txn["id"])
+                split_map[txn["id"]] = splits
 
         for txn in page_txns:
-            cols = st.columns([0.9, 2.8, 2.4, 1.0, 1.5, 0.35, 0.35])
+            cols = st.columns([1.0, 2.6, 0.1, 2.6, 1.1, 1.4, 0.45, 0.45])
 
             # Date
             cols[0].markdown(f"<span class='txn-date'>{txn['date']}</span>",
                              unsafe_allow_html=True)
 
-            # Description + tag/split pills + notes indicator
+            # Description + tags
             tag_html = ""
             if txn.get("is_split"):
                 tag_html += " <span class='tag-split'>✂ split</span>"
             for tg in (txn.get("tags") or []):
-                tag_html += f" <span class='tag-pill'>{tg}</span>"
-            if txn.get("notes"):
-                tag_html += " <span style='color:#8892a4;font-size:.68rem'>📝</span>"
+                tag_html += f" <span class='tag-pill'>🔖 {tg}</span>"
             cols[1].markdown(
-                f"<span class='txn-desc'>{txn['description'][:46]}</span>{tag_html}",
+                f"<span class='txn-desc'>{txn['description'][:44]}</span>{tag_html}",
                 unsafe_allow_html=True)
 
-            # ── Category column — child only, no parent ──
-            cur_cat = txn.get("category") or "Uncategorized"
-            cidx    = find_cat_index(cats_flat, cur_cat)
+            cols[2].markdown("")
+
+            # ── Category ──
+            cur_cat  = txn.get("category") or "Uncategorized"
+            cidx     = find_cat_index(cats_flat, cur_cat)
 
             if txn.get("is_split"):
-                splits  = split_map.get(txn["id"], [])
+                splits = split_map.get(txn["id"], [])
                 if splits:
                     tot_abs = sum(abs(float(s["amount"])) for s in splits) or 1
-                    # Segmented bar
-                    segs_html = ""
+                    # Build inline split box with bar + labels
+                    bar_segs = ""
                     labels_html = ""
                     for i, s in enumerate(splits):
                         clr  = SPLIT_COLORS[i % len(SPLIT_COLORS)]
                         pct  = abs(float(s["amount"])) / tot_abs * 100
-                        nm   = (s.get("category") or "?")[:14]
-                        segs_html  += (
-                            f"<div style='flex:{pct};background:{clr};"
-                            f"display:flex;align-items:center;justify-content:center;"
-                            f"font-size:.62rem;font-weight:700;color:#080c14;"
-                            f"overflow:hidden;white-space:nowrap;padding:0 3px'>"
-                            f"{nm} {pct:.0f}%</div>")
-                        labels_html += (
-                            f"<span style='color:{clr};font-size:.64rem;"
-                            f"font-weight:600;white-space:nowrap'>"
-                            f"● {nm}</span> ")
-                    cols[2].markdown(
+                        nm   = s.get("category","?")[:12]
+                        bar_segs   += f"<div class='split-seg' style='width:{pct:.1f}%;background:{clr};flex-grow:{pct}'></div>"
+                        labels_html += (f"<span class='split-seg-label'>"
+                                        f"<span class='split-dot' style='background:{clr}'></span>"
+                                        f"<span style='color:#8892a4'>{nm}</span>"
+                                        f"<span style='color:{clr};font-weight:700'>{pct:.0f}%</span>"
+                                        f"</span>")
+                    cols[3].markdown(
                         f"<div style='width:100%'>"
-                        f"<div style='display:flex;border-radius:5px;overflow:hidden;"
-                        f"height:18px;gap:1px'>{segs_html}</div>"
-                        f"<div style='display:flex;flex-wrap:wrap;gap:4px;margin-top:2px'>"
-                        f"{labels_html}</div></div>",
+                        f"<div class='split-catbox'>{labels_html}</div>"
+                        f"<div class='split-bar' style='margin-top:3px'>{bar_segs}</div>"
+                        f"</div>",
                         unsafe_allow_html=True)
                 else:
                     clr = _cat_color(cur_cat, _cats())
-                    cols[2].markdown(
-                        f"<span class='cat-badge' style='background:{clr}22;"
-                        f"border:1px solid {clr}55;color:{clr}'>{cur_cat}</span>",
+                    cols[3].markdown(
+                        f"<span class='cat-badge' style='background:{clr}22;border:1px solid {clr}55;color:{clr}'>{cur_cat}</span>",
                         unsafe_allow_html=True)
             else:
-                # Editable dropdown — shows only child name (no parent prefix)
-                new_cat_raw = cols[2].selectbox(
+                new_cat_raw = cols[3].selectbox(
                     "cat", cats_flat, index=cidx,
                     key=f"cat_{txn['id']}",
                     label_visibility="collapsed",
-                    format_func=child_from_display)
+                )
                 new_cat = child_from_display(new_cat_raw)
                 if new_cat != cur_cat:
                     db.update_transaction(txn["id"], category=new_cat)
@@ -926,23 +911,23 @@ elif selected == "Transactions":
 
             # Amount
             ac = "amt-pos" if float(txn["amount"]) >= 0 else "amt-neg"
-            cols[3].markdown(f"<span class='{ac}'>{fmt(txn['amount'])}</span>",
+            cols[4].markdown(f"<span class='{ac}'>{fmt(txn['amount'])}</span>",
                              unsafe_allow_html=True)
 
-            # Account — short name only
-            acc_disp = (txn.get("account_name") or "")[:20]
-            cols[4].markdown(
-                f"<span style='font-size:.74rem;color:#8892a4'>{acc_disp}</span>",
+            # Account
+            acc_disp = (txn.get("account_name") or "")
+            cols[5].markdown(
+                f"<span style='font-size:.74rem;color:#8892a4'>{acc_disp[:18]}</span>",
                 unsafe_allow_html=True)
 
             # Split button
-            if cols[5].button("✂", key=f"split_{txn['id']}_{cur_page}",
-                              help="Split transaction", type="secondary"):
+            if cols[6].button("✂", key=f"split_{txn['id']}_{cur_page}",
+                              help="Split this transaction", type="secondary"):
                 split_dialog(txn)
 
-            # Tags & Notes button
-            if cols[6].button("🏷", key=f"tags_{txn['id']}_{cur_page}",
-                              help="Tags & Notes", type="secondary"):
+            # Tags button
+            if cols[7].button("🏷", key=f"tags_{txn['id']}_{cur_page}",
+                              help="Manage tags", type="secondary"):
                 tags_dialog(txn)
 
             st.markdown("<hr style='border-color:#1e2a3d;margin:1px 0'>",
@@ -950,6 +935,7 @@ elif selected == "Transactions":
 
         # ── Pagination ──
         if total_pages > 1:
+            st.markdown("<br>", unsafe_allow_html=True)
             pcols = st.columns([1, 0.5, 0.7, 0.5, 1])
             with pcols[1]:
                 if cur_page > 1:
@@ -958,7 +944,7 @@ elif selected == "Transactions":
             with pcols[2]:
                 st.markdown(
                     f"<div style='text-align:center;font-size:.8rem;color:#8892a4;"
-                    f"padding:.4rem 0'>{cur_page} / {total_pages}</div>",
+                    f"padding:.5rem 0'>{cur_page} / {total_pages}</div>",
                     unsafe_allow_html=True)
             with pcols[3]:
                 if cur_page < total_pages:
@@ -1225,307 +1211,534 @@ elif selected == "Accounts":
 # REPORTS
 # ═══════════════════════════════════════════════════════════════════════════════
 elif selected == "Reports":
-    st.markdown("<h1 style='margin-bottom:.2rem'>Reports</h1>", unsafe_allow_html=True)
+    # ── Tab bar CSS (inline, dark pill style) ──
+    st.markdown("""
+    <style>
+    .rpt-bar { display:flex; gap:6px; margin-bottom:1.2rem; flex-wrap:wrap }
+    .rpt-btn {
+        padding:.45rem 1.1rem; border-radius:8px; font-size:.82rem; font-weight:600;
+        border:1px solid #2a3650; background:#161d2e; color:#8892a4;
+        cursor:pointer; transition:all .15s; white-space:nowrap;
+    }
+    .rpt-btn.active {
+        background:#f5a623; color:#080c14; border-color:#f5a623;
+    }
+    </style>""", unsafe_allow_html=True)
+
+    REPORT_TABS = [
+        ("Spending",         "💸"),
+        ("Income",           "💵"),
+        ("Income & Expense", "📊"),
+        ("Savings",          "🏦"),
+        ("Net Worth",        "📈"),
+        ("Monthly Summary",  "📅"),
+        ("Taxes",            "🧾"),
+    ]
+
+    tab_sel = st.session_state.get("report_tab", "Spending")
+
+    # Render tab buttons
+    tab_cols = st.columns(len(REPORT_TABS))
+    for i, (tab_name, tab_icon) in enumerate(REPORT_TABS):
+        with tab_cols[i]:
+            is_active = (tab_sel == tab_name)
+            btn_style = ("background:#f5a623;color:#080c14;border:1px solid #f5a623;"
+                         if is_active else
+                         "background:#161d2e;color:#8892a4;border:1px solid #2a3650;")
+            if st.button(f"{tab_icon} {tab_name}", key=f"rtab_{tab_name}",
+                         use_container_width=True):
+                st.session_state["report_tab"] = tab_name
+                st.rerun()
+
+    rpt  = st.session_state.get("report_tab", "Spending")
+    txns = db.get_transactions(start_date=d_start, end_date=d_end)
+
+    # Period badge
     st.markdown(
         f"<div style='display:inline-flex;align-items:center;gap:6px;"
         f"background:#161d2e;border:1px solid #2a3650;border-radius:20px;"
-        f"padding:3px 12px;font-size:.74rem;color:#8892a4;margin-bottom:.5rem'>"
+        f"padding:4px 14px;font-size:.76rem;color:#8892a4;margin-bottom:.8rem'>"
         f"📅 {d_start.strftime('%b %d, %Y')} — {d_end.strftime('%b %d, %Y')}</div>",
         unsafe_allow_html=True)
 
-    txns  = db.get_transactions(start_date=d_start, end_date=d_end)
     VIVID = px.colors.qualitative.Vivid
 
+    # ── helper: small stat badge ──
     def stat_badge(label, value, color="#e8edf5"):
-        return (f"<div style='background:#161d2e;border:1px solid #2a3650;border-radius:10px;"
-                f"padding:.55rem .85rem;text-align:center'>"
-                f"<div style='font-size:.63rem;color:#8892a4;text-transform:uppercase;"
-                f"letter-spacing:.08em;margin-bottom:.15rem'>{label}</div>"
-                f"<div style='font-size:1.2rem;font-weight:700;color:{color}'>{value}</div>"
+        return (f"<div style='background:#161d2e;border:1px solid #2a3650;border-radius:12px;"
+                f"padding:.7rem 1rem;text-align:center'>"
+                f"<div style='font-size:.68rem;color:#8892a4;text-transform:uppercase;"
+                f"letter-spacing:.08em;margin-bottom:.25rem'>{label}</div>"
+                f"<div style='font-size:1.35rem;font-weight:700;color:{color}'>{value}</div>"
                 f"</div>")
 
+    # ── helper: horizontal bar row ──
     def hbar(label, value, max_val, color, sub=""):
         pct = min(value / max_val * 100, 100) if max_val else 0
-        return (f"<div style='margin-bottom:.45rem'>"
-                f"<div style='display:flex;justify-content:space-between;font-size:.78rem;margin-bottom:2px'>"
+        return (f"<div style='margin-bottom:.6rem'>"
+                f"<div style='display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:3px'>"
                 f"<span style='font-weight:500;color:#e8edf5'>{label}</span>"
                 f"<span style='font-weight:700;color:{color}'>{sub or fmt(value)}</span></div>"
-                f"<div style='background:#1c2438;border-radius:3px;height:5px;overflow:hidden'>"
-                f"<div style='width:{pct:.1f}%;height:100%;background:{color};border-radius:3px'>"
-                f"</div></div></div>")
+                f"<div style='background:#1c2438;border-radius:4px;height:6px;overflow:hidden'>"
+                f"<div style='width:{pct:.1f}%;height:100%;background:{color};border-radius:4px'></div>"
+                f"</div></div>")
 
-    tab_spend, tab_income, tab_ie, tab_save, tab_nw, tab_monthly, tab_tax = st.tabs(
-        ["💸 Spending", "💵 Income", "📊 Inc & Exp",
-         "🏦 Savings", "📈 Net Worth", "📅 Monthly", "🧾 Taxes"])
-
-    # ── SPENDING ──────────────────────────────────────────────────────────────
-    with tab_spend:
+    # ─────────────────────────────
+    #  SPENDING
+    # ─────────────────────────────
+    if rpt == "Spending":
         sp        = db.get_spending_by_category(d_start, d_end)
         total_exp = sum(s["total"] for s in sp)
+
         if not sp:
-            st.info("No expense data for this period.")
-        else:
-            k1, k2, k3, k4 = st.columns(4)
-            top_cat   = sp[0]["category"] if sp else "—"
-            avg_daily = total_exp / max((d_end - d_start).days, 1)
-            k1.markdown(stat_badge("Total Expenses", fmt(total_exp), "#ff4f6d"), unsafe_allow_html=True)
-            k2.markdown(stat_badge("Top Category",   top_cat,       "#f5a623"), unsafe_allow_html=True)
-            k3.markdown(stat_badge("Categories",     str(len(sp)),  "#4f8ef7"), unsafe_allow_html=True)
-            k4.markdown(stat_badge("Avg / Day",      fmt(avg_daily),"#9b6dff"), unsafe_allow_html=True)
+            st.info("No expense data for this period."); st.stop()
 
-            chart_col, break_col = st.columns([1.3, 1])
-            with chart_col:
-                fig_pie = go.Figure(go.Pie(
-                    labels=[s["category"] for s in sp[:10]],
-                    values=[s["total"]    for s in sp[:10]],
-                    hole=.6, textinfo="none",
-                    marker=dict(colors=VIVID, line=dict(color="#080c14",width=2)),
-                    hovertemplate="<b>%{label}</b><br>%{value:$,.2f}<extra></extra>"))
-                fig_pie.add_annotation(text=f"<b>{fmt(total_exp)}</b>",
-                                       x=.5, y=.5, showarrow=False,
-                                       font=dict(size=13, color="#e8edf5"))
-                fig_pie.update_layout(showlegend=False, **pb_base(),
-                                      height=280, margin=dict(l=5,r=5,t=5,b=5))
-                st.plotly_chart(fig_pie, use_container_width=True)
-            with break_col:
-                for i, s in enumerate(sp[:12]):
-                    clr = VIVID[i % len(VIVID)]
-                    pct = s["total"] / total_exp * 100 if total_exp else 0
-                    st.markdown(hbar(s["category"], s["total"], total_exp, clr,
-                                     f"{fmt(s['total'])} · {pct:.1f}%"), unsafe_allow_html=True)
+        # Top KPIs
+        k1, k2, k3, k4 = st.columns(4)
+        top_cat   = sp[0]["category"] if sp else "—"
+        top_amt   = sp[0]["total"]    if sp else 0
+        num_cats  = len(sp)
+        avg_daily = total_exp / max((d_end - d_start).days, 1)
+        k1.markdown(stat_badge("Total Expenses", fmt(total_exp), "#ff4f6d"), unsafe_allow_html=True)
+        k2.markdown(stat_badge("Top Category",   top_cat,       "#f5a623"), unsafe_allow_html=True)
+        k3.markdown(stat_badge("Categories",     str(num_cats), "#4f8ef7"), unsafe_allow_html=True)
+        k4.markdown(stat_badge("Avg / Day",      fmt(avg_daily),"#9b6dff"), unsafe_allow_html=True)
 
-            st.markdown("<div style='height:.3rem'></div>", unsafe_allow_html=True)
-            parent_groups: dict = {}
-            for s in sp:
-                par = s.get("parent_category","Other")
-                parent_groups.setdefault(par, []).append(s)
-            for par_name, children in sorted(parent_groups.items()):
-                par_total = sum(c["total"] for c in children)
-                with st.expander(f"{par_name}  —  {fmt(par_total)}", expanded=False):
-                    for child in children:
-                        cat_txns = [t for t in txns if t.get("category")==child["category"] and float(t["amount"])<0]
-                        if not cat_txns: continue
-                        st.markdown(f"<div style='font-weight:600;font-size:.8rem;color:#f5a623;margin:.4rem 0 .2rem'>{child['category']}  {fmt(child['total'])}</div>", unsafe_allow_html=True)
-                        st.dataframe(pd.DataFrame([{"Date":t["date"],"Payee":t["description"][:38],"Tags":", ".join(t.get("tags") or []),"Amount":abs(float(t["amount"]))} for t in cat_txns]),
-                                     use_container_width=True, hide_index=True,
-                                     column_config={"Amount": st.column_config.NumberColumn(format="$%.2f")})
+        st.markdown("<div style='height:.8rem'></div>", unsafe_allow_html=True)
 
-    # ── INCOME ────────────────────────────────────────────────────────────────
-    with tab_income:
-        inc_sp    = db.get_income_by_category(d_start, d_end)
-        total_inc = sum(s["total"] for s in inc_sp)
-        GREEN_PAL = ["#22c55e","#4ade80","#16a34a","#86efac","#15803d","#34d399","#059669"]
-        if not inc_sp:
-            st.info("No income data for this period.")
-        else:
-            k1, k2, k3 = st.columns(3)
-            k1.markdown(stat_badge("Total Income",   fmt(total_inc),     "#00c896"), unsafe_allow_html=True)
-            k2.markdown(stat_badge("Sources",        str(len(inc_sp)),   "#4f8ef7"), unsafe_allow_html=True)
-            k3.markdown(stat_badge("Avg / Day",      fmt(total_inc/max((d_end-d_start).days,1)), "#9b6dff"), unsafe_allow_html=True)
-            c_chart, c_list = st.columns([1.2, 1])
-            with c_chart:
-                fig_pie = go.Figure(go.Pie(
-                    labels=[s["category"] for s in inc_sp], values=[s["total"] for s in inc_sp],
-                    hole=.6, textinfo="none",
-                    marker=dict(colors=GREEN_PAL, line=dict(color="#080c14",width=2)),
-                    hovertemplate="<b>%{label}</b><br>%{value:$,.2f}<extra></extra>"))
-                fig_pie.add_annotation(text=f"<b>{fmt(total_inc)}</b>", x=.5, y=.5, showarrow=False,
-                                       font=dict(size=13, color="#00c896"))
-                fig_pie.update_layout(showlegend=False, **pb_base(), height=260, margin=dict(l=5,r=5,t=5,b=5))
-                st.plotly_chart(fig_pie, use_container_width=True)
-            with c_list:
-                for i, s in enumerate(inc_sp):
-                    clr = GREEN_PAL[i % len(GREEN_PAL)]
-                    pct = s["total"] / total_inc * 100 if total_inc else 0
-                    st.markdown(hbar(s["category"], s["total"], total_inc, clr, f"{fmt(s['total'])} · {pct:.1f}%"), unsafe_allow_html=True)
-            for s in inc_sp:
-                cat_txns = [t for t in txns if t.get("category")==s["category"] and float(t["amount"])>0]
-                if not cat_txns: continue
-                with st.expander(f"{s['category']}  —  {fmt(s['total'])}", expanded=False):
-                    st.dataframe(pd.DataFrame([{"Date":t["date"],"Payee":t["description"][:40],"Amount":float(t["amount"])} for t in cat_txns]),
-                                 use_container_width=True, hide_index=True,
+        # Chart + breakdown
+        chart_col, break_col = st.columns([1.3, 1])
+
+        with chart_col:
+            labels = [s["category"] for s in sp[:10]]
+            values = [s["total"]    for s in sp[:10]]
+            fig_pie = go.Figure(go.Pie(
+                labels=labels, values=values, hole=.6,
+                textinfo="none",
+                marker=dict(colors=VIVID, line=dict(color="#080c14", width=2)),
+                hovertemplate="<b>%{label}</b><br>%{value:$,.2f}<br>%{percent}<extra></extra>"))
+            # center annotation
+            fig_pie.add_annotation(text=f"<b>{fmt(total_exp)}</b><br><span style='font-size:11px'>Total</span>",
+                                   x=.5, y=.5, showarrow=False,
+                                   font=dict(size=14, color="#e8edf5"), align="center")
+            fig_pie.update_layout(showlegend=False, **pb_base(),
+                                  height=320, margin=dict(l=10,r=10,t=10,b=10))
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+        with break_col:
+            st.markdown('<div class="sh" style="margin-top:.3rem">Breakdown</div>',
+                        unsafe_allow_html=True)
+            for i, s in enumerate(sp[:12]):
+                clr = VIVID[i % len(VIVID)]
+                pct = s["total"] / total_exp * 100 if total_exp else 0
+                st.markdown(hbar(s["category"], s["total"], total_exp, clr,
+                                 f"{fmt(s['total'])} · {pct:.1f}%"),
+                            unsafe_allow_html=True)
+
+        # Transactions by category table
+        st.markdown("<div style='height:.5rem'></div>", unsafe_allow_html=True)
+        st.markdown('<div class="sh">Expense transactions by category</div>', unsafe_allow_html=True)
+
+        parent_groups: dict = {}
+        for s in sp:
+            par = s.get("parent_category", "Other")
+            parent_groups.setdefault(par, []).append(s)
+
+        for par_name, children in sorted(parent_groups.items()):
+            par_total = sum(c["total"] for c in children)
+            with st.expander(f"{par_name}  —  {fmt(par_total)}", expanded=False):
+                for child in children:
+                    cat_txns = [t for t in txns
+                                if t.get("category")==child["category"] and float(t["amount"])<0]
+                    if not cat_txns: continue
+                    child_total = sum(abs(float(t["amount"])) for t in cat_txns)
+                    st.markdown(
+                        f"<div style='font-weight:600;font-size:.82rem;color:#f5a623;"
+                        f"margin:.5rem 0 .2rem'>{child['category']}  {fmt(child_total)}</div>",
+                        unsafe_allow_html=True)
+                    sub_rows = [{"Date": t["date"],
+                                 "Account": (t.get("account_name") or "")[:20],
+                                 "Payee":   t["description"][:38],
+                                 "Tags":    ", ".join(t.get("tags") or []),
+                                 "Amount":  abs(float(t["amount"]))} for t in cat_txns]
+                    st.dataframe(pd.DataFrame(sub_rows), use_container_width=True, hide_index=True,
                                  column_config={"Amount": st.column_config.NumberColumn(format="$%.2f")})
 
-    # ── INCOME & EXPENSE ──────────────────────────────────────────────────────
-    with tab_ie:
+    # ─────────────────────────────
+    #  INCOME
+    # ─────────────────────────────
+    elif rpt == "Income":
+        inc_sp     = db.get_income_by_category(d_start, d_end)
+        total_inc  = sum(s["total"] for s in inc_sp)
+        GREEN_PAL  = ["#22c55e","#4ade80","#16a34a","#86efac","#15803d","#34d399","#059669"]
+
+        if not inc_sp:
+            st.info("No income data for this period."); st.stop()
+
+        k1, k2, k3 = st.columns(3)
+        k1.markdown(stat_badge("Total Income",    fmt(total_inc),        "#00c896"), unsafe_allow_html=True)
+        k2.markdown(stat_badge("Income Sources",  str(len(inc_sp)),      "#4f8ef7"), unsafe_allow_html=True)
+        avg_d = total_inc / max((d_end - d_start).days, 1)
+        k3.markdown(stat_badge("Avg / Day",       fmt(avg_d),            "#9b6dff"), unsafe_allow_html=True)
+
+        st.markdown("<div style='height:.8rem'></div>", unsafe_allow_html=True)
+        c_chart, c_list = st.columns([1.2, 1])
+
+        with c_chart:
+            fig_pie = go.Figure(go.Pie(
+                labels=[s["category"] for s in inc_sp],
+                values=[s["total"]    for s in inc_sp],
+                hole=.6, textinfo="none",
+                marker=dict(colors=GREEN_PAL, line=dict(color="#080c14",width=2)),
+                hovertemplate="<b>%{label}</b><br>%{value:$,.2f}<br>%{percent}<extra></extra>"))
+            fig_pie.add_annotation(text=f"<b>{fmt(total_inc)}</b><br><span>Income</span>",
+                                   x=.5, y=.5, showarrow=False,
+                                   font=dict(size=14, color="#00c896"), align="center")
+            fig_pie.update_layout(showlegend=False, **pb_base(),
+                                  height=300, margin=dict(l=10,r=10,t=10,b=10))
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+        with c_list:
+            st.markdown('<div class="sh" style="margin-top:.3rem">Sources</div>',
+                        unsafe_allow_html=True)
+            for i, s in enumerate(inc_sp):
+                clr = GREEN_PAL[i % len(GREEN_PAL)]
+                pct = s["total"] / total_inc * 100 if total_inc else 0
+                st.markdown(hbar(s["category"], s["total"], total_inc, clr,
+                                 f"{fmt(s['total'])} · {pct:.1f}%"),
+                            unsafe_allow_html=True)
+
+        st.markdown('<div class="sh" style="margin-top:.5rem">Income transactions by category</div>',
+                    unsafe_allow_html=True)
+        for s in inc_sp:
+            cat_txns = [t for t in txns
+                        if t.get("category")==s["category"] and float(t["amount"])>0]
+            if not cat_txns: continue
+            with st.expander(f"{s['category']}  —  {fmt(s['total'])}", expanded=False):
+                sub_rows = [{"Date": t["date"],
+                             "Account": (t.get("account_name") or "")[:20],
+                             "Payee":   t["description"][:40],
+                             "Amount":  float(t["amount"])} for t in cat_txns]
+                sub_rows.append({"Date":"","Account":"","Payee":"Total","Amount":s["total"]})
+                st.dataframe(pd.DataFrame(sub_rows), use_container_width=True, hide_index=True,
+                             column_config={"Amount": st.column_config.NumberColumn(format="$%.2f")})
+
+    # ─────────────────────────────
+    #  INCOME & EXPENSE
+    # ─────────────────────────────
+    elif rpt == "Income & Expense":
         cf = db.get_monthly_cash_flow(12)
         cat_monthly = db.get_category_monthly_summary(d_start, d_end)
-        if not cf:
-            st.info("No data yet.")
-        else:
-            df_cf = pd.DataFrame(cf); df_cf["net"] = df_cf["income"] - df_cf["expenses"]
-            k1, k2, k3 = st.columns(3)
-            total_net = df_cf["net"].sum()
-            k1.markdown(stat_badge("Net", fmt(total_net), "#00c896" if total_net>=0 else "#ff4f6d"), unsafe_allow_html=True)
-            k2.markdown(stat_badge("Income",   fmt(df_cf["income"].sum()),   "#00c896"), unsafe_allow_html=True)
-            k3.markdown(stat_badge("Expenses", fmt(df_cf["expenses"].sum()), "#ff4f6d"), unsafe_allow_html=True)
-            fig = go.Figure()
-            fig.add_bar(x=df_cf["month"], y=df_cf["income"],   name="Income",  marker_color="#00c896", opacity=.85, marker_line_width=0)
-            fig.add_bar(x=df_cf["month"], y=df_cf["expenses"], name="Expenses",marker_color="#ff4f6d", opacity=.85, marker_line_width=0)
-            fig.add_scatter(x=df_cf["month"], y=df_cf["net"], name="Net",
-                            line=dict(color="#f5a623",width=2.5), mode="lines+markers",
-                            marker=dict(size=7,color="#f5a623",line=dict(color="#080c14",width=1.5)))
-            fig.update_layout(barmode="group", xaxis=dict(gridcolor="#1e2a3d"),
-                              yaxis=dict(gridcolor="#1e2a3d"),
-                              legend=dict(orientation="h",y=1.12,bgcolor="rgba(0,0,0,0)"),
-                              **pb_base(), height=300)
-            st.plotly_chart(fig, use_container_width=True)
-            if cat_monthly:
-                df_cm = pd.DataFrame(cat_monthly)
-                months_sorted = sorted(df_cm["month"].unique())
-                pivot_rows = []
-                for par in df_cm["parent_category"].unique():
-                    par_df  = df_cm[df_cm["parent_category"]==par]
-                    par_row = {"Category": f"▸ {par}"}
-                    par_total = 0
-                    for m in months_sorted:
-                        v = par_df[par_df["month"]==m]["total"].sum()
-                        par_row[m] = v; par_total += v
-                    par_row["Total"] = par_total
-                    pivot_rows.append(par_row)
-                    for cat in par_df["category"].unique():
-                        cat_df  = par_df[par_df["category"]==cat]
-                        cat_row = {"Category": f"   {cat}"}; cat_total = 0
-                        for m in months_sorted:
-                            v = cat_df[cat_df["month"]==m]["total"].sum()
-                            cat_row[m] = v; cat_total += v
-                        cat_row["Total"] = cat_total; pivot_rows.append(cat_row)
-                pivot_df = pd.DataFrame(pivot_rows).fillna(0)
-                disp_cols = ["Category"] + months_sorted + ["Total"]
-                st.dataframe(pivot_df[disp_cols], use_container_width=True, hide_index=True,
-                             column_config={c: st.column_config.NumberColumn(format="$,.2f") for c in months_sorted+["Total"]})
 
-    # ── SAVINGS ───────────────────────────────────────────────────────────────
-    with tab_save:
+        if not cf:
+            st.info("No data yet."); st.stop()
+
+        df_cf = pd.DataFrame(cf)
+        df_cf["net"] = df_cf["income"] - df_cf["expenses"]
+        total_net = df_cf["net"].sum()
+
+        k1, k2, k3 = st.columns(3)
+        k1.markdown(stat_badge("Total Net Income",  fmt(total_net),
+                               "#00c896" if total_net>=0 else "#ff4f6d"), unsafe_allow_html=True)
+        k2.markdown(stat_badge("Total Income",      fmt(df_cf["income"].sum()),   "#00c896"), unsafe_allow_html=True)
+        k3.markdown(stat_badge("Total Expenses",    fmt(df_cf["expenses"].sum()), "#ff4f6d"), unsafe_allow_html=True)
+
+        st.markdown("<div style='height:.8rem'></div>", unsafe_allow_html=True)
+
+        fig = go.Figure()
+        fig.add_bar(x=df_cf["month"], y=df_cf["income"],    name="Income",
+                    marker_color="#00c896", opacity=.85, marker_line_width=0)
+        fig.add_bar(x=df_cf["month"], y=df_cf["expenses"],  name="Expenses",
+                    marker_color="#ff4f6d", opacity=.85, marker_line_width=0)
+        fig.add_scatter(x=df_cf["month"], y=df_cf["net"], name="Net Savings",
+                        line=dict(color="#f5a623", width=2.5), mode="lines+markers",
+                        marker=dict(size=7, color="#f5a623",
+                                    line=dict(color="#080c14", width=1.5)))
+        fig.update_layout(
+            barmode="group",
+            xaxis=dict(gridcolor="#1e2a3d", showline=False),
+            yaxis=dict(gridcolor="#1e2a3d", showline=False),
+            legend=dict(orientation="h", y=1.12, font=dict(size=11),
+                        bgcolor="rgba(0,0,0,0)"),
+            **pb_base(), height=340)
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Category by month pivot
+        if cat_monthly:
+            st.markdown('<div class="sh">Category summary by month</div>', unsafe_allow_html=True)
+            df_cm = pd.DataFrame(cat_monthly)
+            months_sorted = sorted(df_cm["month"].unique())
+
+            pivot_rows = []
+            for par in df_cm["parent_category"].unique():
+                par_df = df_cm[df_cm["parent_category"]==par]
+                is_inc = bool(par_df["is_income"].iloc[0])
+                par_row = {"Category": f"▸ {par}"}
+                par_total = 0
+                for m in months_sorted:
+                    v = par_df[par_df["month"]==m]["total"].sum()
+                    par_row[m] = v; par_total += v
+                par_row["Total"] = par_total
+                pivot_rows.append(par_row)
+                for cat in par_df["category"].unique():
+                    cat_df  = par_df[par_df["category"]==cat]
+                    cat_row = {"Category": f"   {cat}"}
+                    cat_total = 0
+                    for m in months_sorted:
+                        v = cat_df[cat_df["month"]==m]["total"].sum()
+                        cat_row[m] = v; cat_total += v
+                    cat_row["Total"] = cat_total
+                    pivot_rows.append(cat_row)
+
+            pivot_df  = pd.DataFrame(pivot_rows).fillna(0)
+            disp_cols = ["Category"] + months_sorted + ["Total"]
+            fmt_cols  = {c: st.column_config.NumberColumn(format="$,.2f")
+                         for c in months_sorted + ["Total"]}
+            st.dataframe(pivot_df[disp_cols], use_container_width=True, hide_index=True,
+                         column_config=fmt_cols)
+
+    # ─────────────────────────────
+    #  SAVINGS
+    # ─────────────────────────────
+    elif rpt == "Savings":
         cf = db.get_monthly_cash_flow(12)
         if not cf:
-            st.info("No data yet.")
-        else:
-            df = pd.DataFrame(cf)
-            df["net"]          = df["income"] - df["expenses"]
-            df["savings_rate"] = (df["net"] / df["income"].replace(0,1)*100).round(1)
-            df["cumulative"]   = df["net"].cumsum()
-            k1,k2,k3,k4 = st.columns(4)
-            k1.markdown(stat_badge("Total Saved",   fmt(df["net"].sum()),       "#00c896"), unsafe_allow_html=True)
-            k2.markdown(stat_badge("Avg/Month",     fmt(df["net"].mean()),      "#4f8ef7"), unsafe_allow_html=True)
-            k3.markdown(stat_badge("Avg Rate",      f"{df['savings_rate'].mean():.1f}%","#f5a623"), unsafe_allow_html=True)
-            k4.markdown(stat_badge("Peak Rate",     f"{df['savings_rate'].max():.1f}%","#9b6dff"), unsafe_allow_html=True)
-            fig = go.Figure()
-            bar_colors = ["#00c896" if v>=0 else "#ff4f6d" for v in df["net"]]
-            fig.add_bar(x=df["month"], y=df["net"], name="Monthly", marker_color=bar_colors, opacity=.85, marker_line_width=0)
-            fig.add_scatter(x=df["month"], y=df["cumulative"], name="Cumulative",
-                            line=dict(color="#f5a623",width=2.5), mode="lines+markers",
-                            marker=dict(size=7,color="#f5a623"), yaxis="y2")
-            fig.update_layout(yaxis=dict(gridcolor="#1e2a3d",title="Monthly"),
-                              yaxis2=dict(overlaying="y",side="right",title="Cumulative",showgrid=False,color="#f5a623"),
-                              legend=dict(orientation="h",y=1.12,bgcolor="rgba(0,0,0,0)"),
-                              **pb_base(), height=300)
-            st.plotly_chart(fig, use_container_width=True)
-            st.dataframe(df[["month","income","expenses","net","savings_rate","cumulative"]].rename(
-                columns={"month":"Month","income":"Income","expenses":"Expenses","net":"Net","savings_rate":"Rate %","cumulative":"Cumulative"}),
-                use_container_width=True, hide_index=True,
-                column_config={c: st.column_config.NumberColumn(format="$,.2f") for c in ["Income","Expenses","Net","Cumulative"]})
+            st.info("No data yet."); st.stop()
 
-    # ── NET WORTH ─────────────────────────────────────────────────────────────
-    with tab_nw:
+        df = pd.DataFrame(cf)
+        df["net"]          = df["income"] - df["expenses"]
+        df["savings_rate"] = (df["net"] / df["income"].replace(0, 1) * 100).round(1)
+        df["cumulative"]   = df["net"].cumsum()
+
+        total_saved = df["net"].sum()
+        avg_rate    = df["savings_rate"].mean()
+        peak_rate   = df["savings_rate"].max()
+
+        k1, k2, k3, k4 = st.columns(4)
+        k1.markdown(stat_badge("Total Saved (12mo)",   fmt(total_saved),  "#00c896"), unsafe_allow_html=True)
+        k2.markdown(stat_badge("Avg Monthly Savings",  fmt(df["net"].mean()), "#4f8ef7"), unsafe_allow_html=True)
+        k3.markdown(stat_badge("Avg Savings Rate",     f"{avg_rate:.1f}%","#f5a623"), unsafe_allow_html=True)
+        k4.markdown(stat_badge("Peak Rate",            f"{peak_rate:.1f}%","#9b6dff"), unsafe_allow_html=True)
+
+        st.markdown("<div style='height:.6rem'></div>", unsafe_allow_html=True)
+
+        fig = go.Figure()
+        bar_colors = ["#00c896" if v >= 0 else "#ff4f6d" for v in df["net"]]
+        fig.add_bar(x=df["month"], y=df["net"], name="Monthly Savings",
+                    marker_color=bar_colors, opacity=.85, marker_line_width=0)
+        fig.add_scatter(x=df["month"], y=df["cumulative"], name="Cumulative",
+                        line=dict(color="#f5a623", width=2.5), mode="lines+markers",
+                        marker=dict(size=7, color="#f5a623"),
+                        yaxis="y2")
+        fig.update_layout(
+            yaxis=dict(gridcolor="#1e2a3d", title="Monthly"),
+            yaxis2=dict(overlaying="y", side="right", title="Cumulative",
+                        showgrid=False, color="#f5a623"),
+            legend=dict(orientation="h", y=1.12, bgcolor="rgba(0,0,0,0)"),
+            **pb_base(), height=320)
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.dataframe(
+            df[["month","income","expenses","net","savings_rate","cumulative"]].rename(
+                columns={"month":"Month","income":"Income","expenses":"Expenses",
+                         "net":"Net Saved","savings_rate":"Rate %","cumulative":"Cumulative"}),
+            use_container_width=True, hide_index=True,
+            column_config={c: st.column_config.NumberColumn(format="$,.2f")
+                           for c in ["Income","Expenses","Net Saved","Cumulative"]})
+
+    # ─────────────────────────────
+    #  NET WORTH
+    # ─────────────────────────────
+    elif rpt == "Net Worth":
         accts  = db.get_account_balances()
         assets = sum(a["balance"] for a in accts if a["type"] in ("checking","investment") and a["balance"]>0)
         liabs  = sum(abs(a["balance"]) for a in accts if a["type"] in ("credit","mortgage"))
         nw     = assets - liabs
-        k1,k2,k3 = st.columns(3)
-        k1.markdown(stat_badge("Assets",      fmt(assets), "#00c896"), unsafe_allow_html=True)
-        k2.markdown(stat_badge("Liabilities", fmt(liabs),  "#ff4f6d"), unsafe_allow_html=True)
-        k3.markdown(stat_badge("Net Worth",   fmt(nw), "#00c896" if nw>=0 else "#ff4f6d"), unsafe_allow_html=True)
+
+        k1, k2, k3 = st.columns(3)
+        k1.markdown(stat_badge("Total Assets",      fmt(assets), "#00c896"), unsafe_allow_html=True)
+        k2.markdown(stat_badge("Total Liabilities", fmt(liabs),  "#ff4f6d"), unsafe_allow_html=True)
+        k3.markdown(stat_badge("Net Worth",         fmt(nw),     "#00c896" if nw>=0 else "#ff4f6d"), unsafe_allow_html=True)
+
+        st.markdown("<div style='height:.8rem'></div>", unsafe_allow_html=True)
+
+        # Waterfall-style chart
         if accts:
-            all_items = ([(a["name"],a["balance"],"#00c896") for a in accts if a["type"] in ("checking","investment") and a["balance"]>0]
-                        +[(a["name"],-abs(a["balance"]),"#ff4f6d") for a in accts if a["type"] in ("credit","mortgage")])
-            names  = [x[0] for x in all_items]+["Net Worth"]
-            values = [x[1] for x in all_items]+[nw]
-            colors = [x[2] for x in all_items]+["#f5a623"]
-            fig = go.Figure(go.Bar(x=names, y=values, marker_color=colors,
-                                   text=[fmt(v) for v in values], textposition="outside",
-                                   textfont=dict(size=11,color="#8892a4")))
+            all_items = (
+                [(a["name"], a["balance"], "#00c896")
+                 for a in accts if a["type"] in ("checking","investment") and a["balance"]>0]
+                + [(a["name"], -abs(a["balance"]), "#ff4f6d")
+                   for a in accts if a["type"] in ("credit","mortgage")]
+            )
+            names  = [x[0] for x in all_items] + ["Net Worth"]
+            values = [x[1] for x in all_items] + [nw]
+            colors = [x[2] for x in all_items] + ["#f5a623"]
+
+            fig = go.Figure(go.Bar(
+                x=names, y=values, marker_color=colors,
+                text=[fmt(v) for v in values], textposition="outside",
+                textfont=dict(size=11, color="#8892a4")))
             fig.update_layout(xaxis=dict(gridcolor="#1e2a3d"),
-                              yaxis=dict(gridcolor="#1e2a3d",zeroline=True,zerolinecolor="#2a3650"),
-                              **pb_base(), height=280, showlegend=False)
+                              yaxis=dict(gridcolor="#1e2a3d", zeroline=True,
+                                         zerolinecolor="#2a3650"),
+                              **pb_base(), height=320, showlegend=False)
             st.plotly_chart(fig, use_container_width=True)
+
+        # Two-column breakdown
         col_a, col_l = st.columns(2)
         asset_accts = [a for a in accts if a["type"] in ("checking","investment") and a["balance"]>0]
         liab_accts  = [a for a in accts if a["type"] in ("credit","mortgage")]
+
         with col_a:
             st.markdown('<div class="sh">Assets</div>', unsafe_allow_html=True)
             for a in asset_accts:
-                st.markdown(f"<div style='display:flex;justify-content:space-between;font-size:.82rem;padding:.35rem .2rem;border-bottom:1px solid #1e2a3d'><span>{a['name']}<br><span style='font-size:.7rem;color:#8892a4'>{a['institution']}</span></span><span style='color:#00c896;font-weight:700'>{fmt(a['balance'])}</span></div>", unsafe_allow_html=True)
+                st.markdown(
+                    f"<div style='display:flex;justify-content:space-between;align-items:center;"
+                    f"font-size:.83rem;padding:.4rem .2rem;border-bottom:1px solid #1e2a3d'>"
+                    f"<span>{a['name']}<br>"
+                    f"<span style='font-size:.71rem;color:#8892a4'>{a['institution']}</span></span>"
+                    f"<span style='color:#00c896;font-weight:700'>{fmt(a['balance'])}</span></div>",
+                    unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align:right;font-size:.83rem;font-weight:700;"
+                        f"color:#00c896;padding:.4rem .2rem'>Total {fmt(assets)}</div>",
+                        unsafe_allow_html=True)
+
         with col_l:
             st.markdown('<div class="sh">Liabilities</div>', unsafe_allow_html=True)
             for a in liab_accts:
-                st.markdown(f"<div style='display:flex;justify-content:space-between;font-size:.82rem;padding:.35rem .2rem;border-bottom:1px solid #1e2a3d'><span>{a['name']}<br><span style='font-size:.7rem;color:#8892a4'>{a['institution']}</span></span><span style='color:#ff4f6d;font-weight:700'>{fmt(abs(a['balance']))}</span></div>", unsafe_allow_html=True)
+                st.markdown(
+                    f"<div style='display:flex;justify-content:space-between;align-items:center;"
+                    f"font-size:.83rem;padding:.4rem .2rem;border-bottom:1px solid #1e2a3d'>"
+                    f"<span>{a['name']}<br>"
+                    f"<span style='font-size:.71rem;color:#8892a4'>{a['institution']}</span></span>"
+                    f"<span style='color:#ff4f6d;font-weight:700'>{fmt(abs(a['balance']))}</span></div>",
+                    unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align:right;font-size:.83rem;font-weight:700;"
+                        f"color:#ff4f6d;padding:.4rem .2rem'>Total {fmt(liabs)}</div>",
+                        unsafe_allow_html=True)
+
         if not accts:
             st.info("Add accounts to track net worth.")
 
-    # ── MONTHLY SUMMARY ───────────────────────────────────────────────────────
-    with tab_monthly:
+    # ─────────────────────────────
+    #  MONTHLY SUMMARY
+    # ─────────────────────────────
+    elif rpt == "Monthly Summary":
         cf = db.get_monthly_cash_flow(12)
         if not cf:
-            st.info("No data yet.")
-        else:
-            df = pd.DataFrame(cf)
-            df["net"]          = df["income"] - df["expenses"]
-            df["savings_rate"] = (df["net"]/df["income"].replace(0,1)*100).round(1)
-            k1,k2,k3,k4 = st.columns(4)
-            best_mo  = df.loc[df["net"].idxmax(),"month"] if not df.empty else "—"
-            k1.markdown(stat_badge("12mo Income",   fmt(df["income"].sum()),  "#00c896"), unsafe_allow_html=True)
-            k2.markdown(stat_badge("12mo Expenses", fmt(df["expenses"].sum()),  "#ff4f6d"), unsafe_allow_html=True)
-            k3.markdown(stat_badge("Best Month",    best_mo,                    "#f5a623"), unsafe_allow_html=True)
-            k4.markdown(stat_badge("Avg Net",       fmt(df["net"].mean()),      "#4f8ef7"), unsafe_allow_html=True)
-            fig = go.Figure()
-            fig.add_bar(x=df["month"], y=df["income"],   name="Income",  marker_color="#00c896", opacity=.85, marker_line_width=0)
-            fig.add_bar(x=df["month"], y=df["expenses"], name="Expenses",marker_color="#ff4f6d", opacity=.85, marker_line_width=0)
-            fig.add_scatter(x=df["month"], y=df["net"], name="Net",
-                            line=dict(color="#f5a623",width=2.5), mode="lines+markers",
-                            marker=dict(size=7,color="#f5a623",line=dict(color="#080c14",width=1.5)))
-            fig.update_layout(barmode="group", xaxis=dict(gridcolor="#1e2a3d"), yaxis=dict(gridcolor="#1e2a3d"),
-                              legend=dict(orientation="h",y=1.12,bgcolor="rgba(0,0,0,0)"),
-                              **pb_base(), height=300)
-            st.plotly_chart(fig, use_container_width=True)
-            fig2 = go.Figure(go.Scatter(x=df["month"], y=df["savings_rate"],
-                             fill="tozeroy", line=dict(color="#9b6dff",width=2), fillcolor="#9b6dff18",
-                             hovertemplate="%{x}: %{y:.1f}%<extra></extra>"))
-            fig2.update_layout(title="Savings Rate %", xaxis=dict(gridcolor="#1e2a3d"), yaxis=dict(gridcolor="#1e2a3d"),
-                               **pb_base(), height=150, margin=dict(l=8,r=8,t=28,b=8))
-            st.plotly_chart(fig2, use_container_width=True)
-            st.dataframe(df[["month","income","expenses","net","savings_rate"]].rename(columns={"month":"Month","income":"Income","expenses":"Expenses","net":"Net","savings_rate":"Rate %"}),
-                         use_container_width=True, hide_index=True,
-                         column_config={c: st.column_config.NumberColumn(format="$,.2f") for c in ["Income","Expenses","Net"]})
+            st.info("No data yet."); st.stop()
 
-    # ── TAXES ─────────────────────────────────────────────────────────────────
-    with tab_tax:
+        df = pd.DataFrame(cf)
+        df["net"]          = df["income"] - df["expenses"]
+        df["savings_rate"] = (df["net"] / df["income"].replace(0,1) * 100).round(1)
+
+        # KPI strip
+        k1, k2, k3, k4 = st.columns(4)
+        best_mo   = df.loc[df["net"].idxmax(), "month"] if not df.empty else "—"
+        worst_mo  = df.loc[df["net"].idxmin(), "month"] if not df.empty else "—"
+        k1.markdown(stat_badge("12mo Income",  fmt(df["income"].sum()),   "#00c896"), unsafe_allow_html=True)
+        k2.markdown(stat_badge("12mo Expenses",fmt(df["expenses"].sum()), "#ff4f6d"), unsafe_allow_html=True)
+        k3.markdown(stat_badge("Best Month",   best_mo,                   "#f5a623"), unsafe_allow_html=True)
+        k4.markdown(stat_badge("Avg Net",      fmt(df["net"].mean()),     "#4f8ef7"), unsafe_allow_html=True)
+
+        st.markdown("<div style='height:.6rem'></div>", unsafe_allow_html=True)
+
+        fig = go.Figure()
+        fig.add_bar(x=df["month"], y=df["income"],   name="Income",
+                    marker_color="#00c896", opacity=.85, marker_line_width=0)
+        fig.add_bar(x=df["month"], y=df["expenses"], name="Expenses",
+                    marker_color="#ff4f6d", opacity=.85, marker_line_width=0)
+        fig.add_scatter(x=df["month"], y=df["net"], name="Net",
+                        line=dict(color="#f5a623", width=2.5), mode="lines+markers",
+                        marker=dict(size=7, color="#f5a623",
+                                    line=dict(color="#080c14", width=1.5)))
+        fig.update_layout(barmode="group",
+                          xaxis=dict(gridcolor="#1e2a3d"),
+                          yaxis=dict(gridcolor="#1e2a3d"),
+                          legend=dict(orientation="h", y=1.12, bgcolor="rgba(0,0,0,0)"),
+                          **pb_base(), height=320)
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Savings-rate sparkline
+        fig2 = go.Figure(go.Scatter(
+            x=df["month"], y=df["savings_rate"],
+            fill="tozeroy", line=dict(color="#9b6dff", width=2),
+            fillcolor="#9b6dff18",
+            hovertemplate="%{x}: %{y:.1f}%<extra></extra>"))
+        fig2.update_layout(title="Savings Rate %",
+                           xaxis=dict(gridcolor="#1e2a3d"),
+                           yaxis=dict(gridcolor="#1e2a3d"),
+                           **pb_base(), height=160, margin=dict(l=8,r=8,t=32,b=8))
+        st.plotly_chart(fig2, use_container_width=True)
+
+        st.dataframe(
+            df[["month","income","expenses","net","savings_rate"]].rename(
+                columns={"month":"Month","income":"Income","expenses":"Expenses",
+                         "net":"Net","savings_rate":"Rate %"}),
+            use_container_width=True, hide_index=True,
+            column_config={c: st.column_config.NumberColumn(format="$,.2f")
+                           for c in ["Income","Expenses","Net"]})
+
+    # ─────────────────────────────
+    #  TAXES
+    # ─────────────────────────────
+    elif rpt == "Taxes":
         inc_sp = db.get_income_by_category(d_start, d_end)
         exp_sp = db.get_spending_by_category(d_start, d_end)
+
         TAX_KW = ["tax","donation","charitable","rrsp","resp","business","tuition","education"]
         tax_cats     = [s for s in exp_sp if any(k in s["category"].lower() for k in TAX_KW)]
         income_total = sum(s["total"] for s in inc_sp)
         tax_total    = sum(s["total"] for s in tax_cats)
-        ded_rate     = tax_total/income_total*100 if income_total else 0
-        k1,k2,k3 = st.columns(3)
-        k1.markdown(stat_badge("Total Income",      fmt(income_total), "#00c896"), unsafe_allow_html=True)
-        k2.markdown(stat_badge("Tax-Related Spend", fmt(tax_total),    "#ff4f6d"), unsafe_allow_html=True)
-        k3.markdown(stat_badge("Deductible Rate",   f"{ded_rate:.1f}%","#f5a623"), unsafe_allow_html=True)
+        ded_rate     = tax_total / income_total * 100 if income_total else 0
+
+        k1, k2, k3 = st.columns(3)
+        k1.markdown(stat_badge("Total Income",       fmt(income_total),   "#00c896"), unsafe_allow_html=True)
+        k2.markdown(stat_badge("Tax-Related Spend",  fmt(tax_total),      "#ff4f6d"), unsafe_allow_html=True)
+        k3.markdown(stat_badge("Deductible Rate",    f"{ded_rate:.1f}%",  "#f5a623"), unsafe_allow_html=True)
+
+        st.markdown("<div style='height:.8rem'></div>", unsafe_allow_html=True)
         tc1, tc2 = st.columns(2)
+
         with tc1:
             st.markdown('<div class="sh">💵 Income Sources</div>', unsafe_allow_html=True)
-            for s in inc_sp:
-                pct = s["total"]/income_total*100 if income_total else 0
-                st.markdown(hbar(s["category"],s["total"],income_total,"#00c896",f"{fmt(s['total'])}  {pct:.1f}%"), unsafe_allow_html=True)
-            if not inc_sp: st.info("No income data.")
+            if inc_sp:
+                for s in inc_sp:
+                    pct = s["total"] / income_total * 100 if income_total else 0
+                    st.markdown(hbar(s["category"], s["total"], income_total, "#00c896",
+                                     f"{fmt(s['total'])}  {pct:.1f}%"),
+                                unsafe_allow_html=True)
+                st.markdown(
+                    f"<div style='text-align:right;font-weight:700;font-size:.83rem;"
+                    f"color:#00c896;padding:.3rem 0'>Total  {fmt(income_total)}</div>",
+                    unsafe_allow_html=True)
+            else:
+                st.info("No income data for this period.")
+
         with tc2:
             st.markdown('<div class="sh">🧾 Deductions & Tax Payments</div>', unsafe_allow_html=True)
-            for s in tax_cats:
-                pct = s["total"]/tax_total*100 if tax_total else 0
-                st.markdown(hbar(s["category"],s["total"],tax_total,"#f5a623",f"{fmt(s['total'])}  {pct:.1f}%"), unsafe_allow_html=True)
-            if not tax_cats: st.info("No tax-related expenses.")
+            if tax_cats:
+                for s in tax_cats:
+                    pct = s["total"] / tax_total * 100 if tax_total else 0
+                    st.markdown(hbar(s["category"], s["total"], tax_total, "#f5a623",
+                                     f"{fmt(s['total'])}  {pct:.1f}%"),
+                                unsafe_allow_html=True)
+                st.markdown(
+                    f"<div style='text-align:right;font-weight:700;font-size:.83rem;"
+                    f"color:#f5a623;padding:.3rem 0'>Total  {fmt(tax_total)}</div>",
+                    unsafe_allow_html=True)
+            else:
+                st.info("No tax-related expenses for this period.")
+
         st.markdown("---")
-        st.markdown("<div style='background:#1c2438;border:1px solid #2a3650;border-radius:10px;padding:.7rem 1rem;font-size:.8rem;color:#8892a4'>💡 <b style='color:#f5a623'>Tax tip:</b> Export a CSV from the Import page and share with your accountant.</div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div style='background:#1c2438;border:1px solid #2a3650;border-radius:10px;"
+            "padding:.8rem 1rem;font-size:.82rem;color:#8892a4'>"
+            "💡 <b style='color:#f5a623'>Tax tip:</b> Use the Export button on the Import page "
+            "to download a full CSV of your transactions — share it with your accountant "
+            "for detailed tax planning.</div>",
+            unsafe_allow_html=True)
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # INVESTMENTS
