@@ -1,0 +1,247 @@
+==============================================================
+FINANCEIQ — FULL APP CONTEXT  (v2)
+Use this file as a prompt to regenerate the exact app.
+==============================================================
+
+## OVERVIEW
+FinanceIQ is a Canadian personal budgeting app built with Python + Streamlit.
+Backend: SQL Server Express (localhost\SQLExpress, database: FinanceIQ).
+No AI used for categorization — rules-based only.
+Run: streamlit run app.py
+
+## TECH STACK
+- Python 3.8+
+- streamlit >= 1.35
+- pandas, plotly, streamlit-option-menu, openpyxl, pyodbc
+- SQL Server Express (pyodbc connection string in database.py)
+
+## FILES
+1. app.py           — Main Streamlit app (all pages / UI)
+2. database.py      — All SQL Server DB operations
+3. parsers.py       — CSV parsers for 5 Canadian institutions
+4. categorizer.py   — Rule-based transaction categorizer
+5. Database_Setup.sql — Full DB creation + seeding script (run once)
+6. requirements.txt — Python dependencies
+
+## DATABASE SCHEMA  (8 tables)
+
+### parent_categories
+  id INT PK, name NVARCHAR(100) UNIQUE, color NVARCHAR(7),
+  icon NVARCHAR(10), is_income BIT DEFAULT 0
+
+### child_categories
+  id INT PK, parent_id INT FK→parent_categories,
+  name NVARCHAR(100), color NVARCHAR(7), icon NVARCHAR(10),
+  is_income BIT DEFAULT 0
+
+### accounts
+  id INT PK, name, institution, type (checking/credit/investment/mortgage),
+  account_number, currency DEFAULT 'CAD', balance DECIMAL(18,2),
+  created_at, UNIQUE(institution, account_number)
+
+### transactions
+  id, account_id FK, date, description, original_desc, amount DECIMAL(18,2),
+  parent_category_id FK, child_category_id FK, memo,
+  is_split BIT, is_transfer BIT, transfer_to_account_id FK,
+  transfer_investment_cat, cleared BIT, currency,
+  tags NVARCHAR(MAX) [JSON array], ai_confidence DECIMAL(5,2),
+  hash NVARCHAR(100) UNIQUE [MD5 dedup fingerprint], imported_at
+
+### split_transactions
+  id, transaction_id FK→transactions ON DELETE CASCADE,
+  child_category_id FK, amount DECIMAL(18,2), memo
+
+### categorization_rules
+  id, pattern NVARCHAR(255), child_category_id FK,
+  match_type (contains/startswith/exact/regex),
+  priority INT, use_count INT, created_at
+
+### budgets
+  id, child_category_id FK, month_year DATE (first of month),
+  amount DECIMAL(18,2),
+  carry_forward BIT DEFAULT 0,
+  carry_forward_type NVARCHAR(50) DEFAULT 'none'
+    — values: none / underspent / overspent / both
+  UNIQUE(child_category_id, month_year)
+  Budget lookup: get most-recent row where month_year <= requested month
+
+### goals
+  id, name NVARCHAR(255), goal_type (total/monthly),
+  target_amount DECIMAL(18,2), monthly_amount DECIMAL(18,2),
+  target_date DATE, account_id FK→accounts, created_at
+
+## CATEGORY STRUCTURE  (21 parents, ~100 children)
+Parents: Income, Housing, Utilities, Food & Dining, Transportation,
+Health & Medical, Personal Care, Shopping, Entertainment, Travel,
+Education, Children & Family, Pets, Gifts & Donations, Subscriptions,
+Cell Phone, Financial, Investments, Taxes, Business Expenses, Uncategorized
+
+Category dropdowns in UI display as "Parent > Child"; only child name is saved.
+
+## PAGES / NAVIGATION (streamlit-option-menu sidebar)
+1. Dashboard      — KPIs, 6-month cash flow, donut chart, recent txns, top spending
+2. Transactions   — Full transaction list with filter panel, tags, split
+3. Budgets        — Performance only (no separate "Set Budgets" tab). Inline ✏️ edit icon per row opens budget_edit_dialog
+4. Goals          — Savings goals (total target or monthly), linked account, progress bar
+5. Accounts       — Net worth, account list by type, update balance/name
+6. Reports        — 7 tabs: Spending / Income / Income & Expense / Savings / Net Worth / Monthly Summary / Taxes
+7. Investments    — Investment contributions tracker
+8. Import         — Multi-file CSV import, export
+9. Settings       — Categories, Rules, Data management
+
+## TRANSACTIONS PAGE DETAILS
+- Top bar: Search | 🔽 Filters toggle | 🔄 Reset | Sort dropdown
+- Filter panel (shows on toggle, Quicken-style, dark card):
+    Accounts (multiselect), Categories (multiselect), Tags (multiselect),
+    Date Range (from/to), Amount filter (All/Expenses/Income/Greater than/Less than)
+- Active filters shown as gold chips below the bar
+- Column headers: Date ↕ | Description | (blank) | Category | Amount ↕ | Account | ✂ | 🏷
+- Category column: colored badge (hue from parent category palette). Width is wider than v1.
+- Split categories: shown INLINE on the category badge as:
+    [● Cat1 XX%  ● Cat2 YY%] with a thin color bar below — all on one line, no separate lines
+- Split button (✂) → split_dialog: default 2 rows, full amount on row 1, 0 on row 2.
+    When row 1 amount changes, row 2 auto-updates to total - row1.
+- Tags button (🏷) → tags_dialog: add/remove tags, create new tags
+- NO "mark as transfer" (↔) button (removed per requirement 8)
+- Pagination: 25 per page
+
+## BUDGETS PAGE DETAILS
+- No separate "Set Budgets" tab
+- Single view: month selector (past/current/future months), performance bars
+- Each budget row has ✏️ button → budget_edit_dialog
+- budget_edit_dialog fields: Amount, Effective From date (backdated/current/future), Carry Forward dropdown
+- Carry forward types: none / underspent / overspent / both
+- "Copy Budgets from Last Month" button at bottom
+- Categories with spending but no budget shown in collapsible expander
+
+## GOALS PAGE DETAILS
+- List existing goals with progress bar (teal color)
+- Progress computed from linked account balance vs target
+- Add goal form: Name, Goal Type (Total/Monthly), Target Amount, Monthly Savings,
+  Target Date (optional), Linked Account (optional)
+- Delete button (🗑) per goal
+
+## REPORTS PAGE DETAILS
+- 7 custom tab buttons (not stTabs, rendered as st.button rows)
+- Session state key: "report_tab" defaults to "Spending"
+
+### Spending tab
+  - Total expenses headline + donut chart (left) + multi-column legend (right)
+  - Expense transactions by category: collapsible sections by parent category,
+    each showing date/account/payee/tags/amount table
+
+### Income tab
+  - Total income headline + green donut chart
+  - Income transactions by category: expandable sections
+
+### Income & Expense tab
+  - 3 KPIs: Total Net Income / Total Income / Total Expenses
+  - Grouped bar chart (income up, expenses down as negative bars) + net line
+  - Category pivot table: months as columns, parent+child rows, Total column
+
+### Savings tab
+  - 2 KPIs: Total Saved / Avg Rate
+  - Bar chart (monthly savings) + cumulative line
+  - Summary table
+
+### Net Worth tab
+  - 3 KPIs: Assets / Liabilities / Net Worth
+  - Two columns: Assets list (green) + Liabilities list (red)
+
+### Monthly Summary tab
+  - Grouped bar chart income/expenses + net line
+  - Summary table (month, income, expenses, net, savings %)
+
+### Taxes tab
+  - 2 KPIs: Total Income / Tax-Related Expenses
+  - Income Sources table (green) + Tax-Related Deductions table (red)
+  - Note: tax categories matched by keywords: tax, donation, charitable, rrsp, resp, business
+
+## CATEGORIZATION LOGIC (categorizer.py)
+Priority: DB rules → fast regex rules → "Uncategorized"
+- DB rules checked first (user-saved, highest priority)
+- 100+ Canadian merchant regex patterns compiled at startup
+- Manual correction auto-saves a keyword rule (learn_from_correction)
+- categorize_batch() used on import
+
+## CSV IMPORT (parsers.py)
+Supported institutions: Wealthsimple Cash, Rogers Mastercard, Questrade,
+Wealthsimple Invest, CIBC Mortgage
+- Auto-detects account name + card/account number
+- MD5 hash dedup: account+date+description+amount
+- Multiple files can be uploaded at once
+- ACCOUNT_TYPES dict maps institution → (institution_name, acc_type)
+- INSTITUTION_PARSERS dict maps institution → parse function
+
+## DEDUPLICATION
+Every transaction fingerprinted as MD5(account+date+description+amount).
+Duplicate hash → silently skipped on import (pyodbc.IntegrityError on UNIQUE constraint).
+
+## DESIGN SYSTEM (CSS variables in app.py <style> block)
+--bg: #080c14 (page background)
+--card: #0f1623 (card background)
+--elev: #161d2e (elevated surface)
+--elev2: #1c2438 (more elevated)
+--gold: #f5a623 (primary accent / buttons)
+--teal: #00d4b4 (secondary accent)
+--red: #ff4f6d
+--green: #00c896
+--blue: #4f8ef7
+--purple: #9b6dff (tags)
+--fg: #e8edf5
+--muted: #8892a4
+--bdr: #1e2a3d
+--bdr2: #2a3650
+Fonts: Inter (body), Syne (headings/logo)
+
+## CATEGORY COLOR PALETTE (CAT_PALETTE dict in app.py)
+Maps parent category name → hex color for colored category badges.
+
+## SPLIT COLORS (SPLIT_COLORS list)
+["#f5a623","#00d4b4","#4f8ef7","#ff4f6d","#9b6dff","#00c896","#f97316","#22d3ee","#a78bfa","#fb923c"]
+Used for split transaction segment colors.
+
+## TAGS SYSTEM
+- tags column in transactions: JSON array string, e.g. '["vacation","tax-deductible"]'
+- db.get_all_tags() returns all unique tags
+- db.update_transaction(id, tags=[...]) saves tags
+- Filter panel: multiselect on tags
+- 🏷 button on each transaction row opens tags_dialog
+- tags_dialog: shows current tags (click to remove), add from existing, create new
+
+## BUDGET EFFECTIVE DATE LOGIC
+- upsert_budget() accepts effective_date param (overrides month_key)
+- get_budgets(month_key) returns the MOST RECENT budget row per category where month_year <= requested month
+- This means changing a budget in March only affects March+, not Jan/Feb
+- carry_forward_type: 'none'=fresh each month, 'underspent'=roll unused, 'overspent'=deduct deficit, 'both'=both
+
+## DEFAULT BUDGETS (Database_Setup.sql Section 4)
+45 default budgets effective 2024-01-01 covering all major categories.
+Key amounts: Mortgage 1800, Groceries 600, Childcare 800, RRSP 500,
+Car Payment 400, TFSA 300, Restaurants 150, RESP 200, Gas 150, Electricity 100.
+
+## GOALS DB FUNCTIONS
+db.get_goals(), db.add_goal(name, goal_type, target_amount, monthly_amount, target_date, account_id)
+db.delete_goal(goal_id), db.update_goal(goal_id, **kwargs)
+
+## MIGRATION (_migrate function in database.py)
+Adds missing columns to existing DB without requiring full rebuild:
+- accounts.account_number
+- transactions: is_transfer, transfer_to_account_id, transfer_investment_cat, tags
+- goals table (CREATE IF NOT EXISTS)
+- budgets.carry_forward, budgets.carry_forward_type
+
+## KEY DESIGN DECISIONS
+1. Category badge in transactions is a colored inline span (not a bare selectbox) —
+   selectbox appears for non-split rows, colored box for split rows
+2. Split dialog: 2 rows default, first row gets full amount, second gets 0.
+   Auto-balance: when row 0 changes, row 1 = total - row0 (triggers st.rerun)
+3. Budgets: NO separate Set Budgets tab. All editing via ✏️ inline icon.
+4. Report tabs are st.button elements in a row, not stTabs, for custom styling.
+5. "Mark as Transfer" button removed from transaction rows.
+6. Filter panel is a collapsible section (not inline filters) like Quicken/Monarch Money.
+7. Tags stored as JSON array in transactions.tags column.
+
+==============================================================
+END OF CONTEXT
+==============================================================
